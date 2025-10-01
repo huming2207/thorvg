@@ -130,6 +130,19 @@ if get_option('file') == true
 endif
 
 
+#Custom Allocator
+custom_allocator_header = get_option('custom_allocator_header')
+if custom_allocator_header != ''
+    cpp = meson.get_compiler('cpp')
+    if cpp.get_id() == 'msvc'
+        add_project_arguments('/FI' + custom_allocator_header, language : 'cpp')
+    else
+        add_project_arguments('-include', custom_allocator_header, language : 'cpp')
+    endif
+    config_h.set10('THORVG_CUSTOM_ALLOCATOR', true)
+endif
+
+
 #Extra
 lottie_expressions = lottie_loader and get_option('extra').contains('lottie_expressions')
 
@@ -182,6 +195,7 @@ summary(
     'Log Message': get_option('log'),
     'Tests': get_option('tests'),
     'Examples': get_option('examples'),
+    'Custom Allocator': get_option('custom_allocator_header'),
   },
   bool_yn: true,
 )
