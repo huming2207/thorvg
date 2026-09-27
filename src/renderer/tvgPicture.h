@@ -175,7 +175,9 @@ struct PictureImpl : Picture
         }
 
         if (!this->resolver) this->resolver = new AssetResolver;
-        *(this->resolver) = {resolver, data, fallback};
+        this->resolver->func = resolver;
+        this->resolver->data = data;
+        this->resolver->fallback = fallback;
         return Result::Success;
     }
 

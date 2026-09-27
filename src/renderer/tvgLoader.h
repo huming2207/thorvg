@@ -33,7 +33,7 @@
 namespace tvg
 {
 
-struct AssetResolver
+struct AssetResolver : Allocator
 {
     std::function<bool(Paint* paint, const char* src, void* data)> func;
     void* data;
@@ -64,7 +64,7 @@ struct PictureOps : LoaderOps
         LoaderOps{Type::Picture, owner}, resolver(resolver), rpath(rpath), accessible(accessible) {}
 };
 
-struct Loader
+struct Loader : Allocator
 {
     INLIST_ITEM(Loader);
 
