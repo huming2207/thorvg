@@ -11,6 +11,7 @@ endif
 
 test_file = [
     'src/testAccessor.cpp',
+    'src/testAllocatorData.cpp',
     'src/testAnimation.cpp',
     'src/testFill.cpp',
     'src/testInitializer.cpp',
