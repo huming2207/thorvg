@@ -5,8 +5,7 @@
 #include <functional>
 #include <list>
 #include <cstdarg>
-#include <cstddef>
-#include <cstdlib>
+#include "tvgAllocator.h"
 
 #define TVG_VERSION_MAJOR 1  // for compile-time checks
 #define TVG_VERSION_MINOR 0  // for compile-time checks
@@ -360,19 +359,6 @@ struct Matrix
     float e31, e32, e33;
 };
 
-/**
- * @brief Heap allocator callbacks
- *
- * The default heap allocator points to std::malloc, std::calloc, std::realloc and std::free.
- * Change to equivalent heap allocator functions when necessary.
- */
-struct HeapAllocator
-{
-    void* (*alloc)(size_t) = std::malloc;
-    void* (*calloc)(size_t, size_t) = std::calloc;
-    void* (*realloc)(void*, size_t) = std::realloc;
-    void (*free)(void*) = std::free;
-};
 
 
 /**
@@ -428,7 +414,7 @@ struct GlyphMetrics
  * Paint represents such a graphical object and its behaviors such as duplication, transformation and composition.
  * TVG recommends the user to regard a paint as a set of volatile commands. They can prepare a Paint and then request a Canvas to run them.
  */
-struct TVG_API Paint
+struct TVG_API Paint : Allocator
 {
     /**
      * @brief Retrieves the parent paint object.
@@ -826,7 +812,7 @@ struct TVG_API Paint
  * It specifies the gradient behavior in case the area defined by the gradient bounds
  * is smaller than the area to be filled.
  */
-struct TVG_API Fill
+struct TVG_API Fill : Allocator
 {
     /**
      * @brief A data structure storing the information about the color and its relative position inside the gradient bounds.
@@ -925,7 +911,7 @@ struct TVG_API Fill
  * @note A Canvas behavior depends on the raster engine though the final content of the buffer is expected to be identical.
  * @warning The Paint objects belonging to one Canvas can't be shared among multiple Canvases.
  */
-struct TVG_API Canvas
+struct TVG_API Canvas : Allocator
 {
     /**
      * @brief Returns the list of paints currently held by the Canvas.
@@ -2680,7 +2666,7 @@ struct TVG_API Initializer final
  *
  * @since 0.13
  */
-struct TVG_API Animation
+struct TVG_API Animation : Allocator
 {
     /**
      * @brief Specifies the current frame in the animation.
@@ -2809,7 +2795,7 @@ struct TVG_API Animation
  *
  * @since 0.5
  */
-struct TVG_API Saver
+struct TVG_API Saver : Allocator
 {
     /**
      * @brief Sets the base background content for the saved image.
@@ -2903,7 +2889,7 @@ struct TVG_API Saver
  *
  * @since 0.10
  */
-struct TVG_API Accessor
+struct TVG_API Accessor : Allocator
 {
     /**
      * @brief Set the access function for traversing the Picture scene tree nodes.

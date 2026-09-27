@@ -25,11 +25,25 @@
 
 #include <cstdlib>
 #include <cstddef>
-#include "thorvg.h"
+#include <new>
 
 //separate memory allocators for clean customization
 namespace tvg
 {
+    /**
+     * @brief Heap allocator callbacks
+     *
+     * The default heap allocator points to std::malloc, std::calloc, std::realloc and std::free.
+     * Change to equivalent heap allocator functions when necessary.
+     */
+    struct HeapAllocator
+    {
+        void* (*alloc)(size_t) = std::malloc;
+        void* (*calloc)(size_t, size_t) = std::calloc;
+        void* (*realloc)(void*, size_t) = std::realloc;
+        void (*free)(void*) = std::free;
+    };
+
     extern HeapAllocator _heapAllocator;
 
     template<typename T = void>
@@ -59,6 +73,66 @@ namespace tvg
         if (_heapAllocator.free) return _heapAllocator.free(ptr);
         return std::free(ptr);
     }
+
+    //Keep object allocation local to ThorVG, including in static builds.
+    struct Allocator
+    {
+        static void* operator new(std::size_t size)
+        {
+            if (auto ptr = tvg::malloc(size ? size : 1)) return ptr;
+            //ThorVG also builds without exceptions; never construct at nullptr.
+            std::abort();
+        }
+
+        static void* operator new[](std::size_t size)
+        {
+            return Allocator::operator new(size);
+        }
+
+        static void* operator new(std::size_t size, const std::nothrow_t&) noexcept
+        {
+            return tvg::malloc(size ? size : 1);
+        }
+
+        static void* operator new[](std::size_t size, const std::nothrow_t& tag) noexcept
+        {
+            return Allocator::operator new(size, tag);
+        }
+
+        static void* operator new(std::size_t, void* ptr) noexcept
+        {
+            return ptr;
+        }
+
+        static void* operator new[](std::size_t, void* ptr) noexcept
+        {
+            return ptr;
+        }
+
+        static void operator delete(void* ptr) noexcept
+        {
+            tvg::free(ptr);
+        }
+
+        static void operator delete[](void* ptr) noexcept
+        {
+            tvg::free(ptr);
+        }
+
+        static void operator delete(void* ptr, const std::nothrow_t&) noexcept
+        {
+            tvg::free(ptr);
+        }
+
+        static void operator delete[](void* ptr, const std::nothrow_t&) noexcept
+        {
+            tvg::free(ptr);
+        }
+
+        static void operator delete(void*, void*) noexcept {}
+
+        static void operator delete[](void*, void*) noexcept {}
+    };
 }
 
 #endif //_TVG_ALLOCATOR_H_
