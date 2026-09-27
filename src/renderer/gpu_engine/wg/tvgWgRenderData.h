@@ -71,7 +71,7 @@ struct WgRenderSettings
     void release(WgContext& context);
 };
 
-struct WgPaint
+struct WgPaint : Allocator
 {
     RenderRegion viewport;
     Array<WgPaint*> clips;
@@ -178,7 +178,7 @@ struct WgStencilBatchRange
     bool solidOnly;
 };
 
-struct WgRenderEffect
+struct WgRenderEffect : Allocator
 {
     WGPUBindGroup bindGroupParams{};
     WGPUBuffer bufferParams{};

@@ -36,7 +36,7 @@ void* arrayCompact(void* data, uint32_t count, uint32_t& reserved, size_t size);
 void* arrayGrow(void* data, uint32_t count, uint32_t& reserved, size_t size);
 
 template<class T>
-struct Array
+struct Array : Allocator
 {
     T* data = nullptr;
     uint32_t count = 0;

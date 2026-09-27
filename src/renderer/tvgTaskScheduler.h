@@ -37,7 +37,7 @@ namespace tvg
 
 #ifdef THORVG_THREAD_SUPPORT
 
-struct Task
+struct Task : Allocator
 {
 private:
     Array<Task*> nexts;     // dependent tasks that must wait for this task to finish
@@ -85,7 +85,7 @@ public:
 
 #else  //THORVG_THREAD_SUPPORT
 
-struct Task
+struct Task : Allocator
 {
 public:
     INLIST_ITEM(Task);

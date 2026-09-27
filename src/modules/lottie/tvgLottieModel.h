@@ -42,7 +42,7 @@ struct LottieComposition;
 
 struct LottieStroke
 {
-    struct DashAttr
+    struct DashAttr : Allocator
     {
         LottieFloat offset = 0.0f;
         LottieFloat* values = nullptr;
@@ -87,7 +87,7 @@ struct LottieStroke
     StrokeJoin join = StrokeJoin::Round;
 };
 
-struct LottieEffect
+struct LottieEffect : Allocator
 {
     enum Type : uint8_t {Custom = 5, Tint = 20, Fill, Stroke, Tritone, DropShadow = 25, GaussianBlur = 29};
 
@@ -225,7 +225,7 @@ struct LottieFxGaussianBlur : LottieEffect
 };
 
 
-struct LottieMask
+struct LottieMask : Allocator
 {
     LottiePathSet pathset;
     LottieFloat expand = 0.0f;
@@ -253,7 +253,7 @@ struct LottieOverride
 #define OVERRIDE(target) LottieOverride::apply(target, prop, backup, release)
 };
 
-struct LottieObject
+struct LottieObject : Allocator
 {
     enum Type : uint8_t
     {
@@ -299,7 +299,7 @@ struct LottieObject
 };
 
 
-struct LottieGlyph
+struct LottieGlyph : Allocator
 {
     Array<LottieObject*> children;   //glyph shapes.
     float width;
@@ -393,7 +393,7 @@ struct LottieTextRange : LottieObject
 };
 
 
-struct LottieFont
+struct LottieFont : Allocator
 {
     enum Origin : uint8_t {Local = 0, CssURL, ScriptURL, FontURL};
 
@@ -433,7 +433,7 @@ struct LottieFont
     }
 };
 
-struct LottieMarker
+struct LottieMarker : Allocator
 {
     char* name = nullptr;
     float time = 0.0f;
@@ -446,7 +446,7 @@ struct LottieMarker
 };
 
 
-struct LottieTextFollowPath
+struct LottieTextFollowPath : Allocator
 {
 private:
     RenderPath path;
@@ -686,7 +686,7 @@ struct LottieEllipse : LottieShape
 
 struct LottieTransform : LottieObject
 {
-    struct SeparateCoord
+    struct SeparateCoord : Allocator
     {
         LottieFloat x = 0.0f;
         LottieFloat y = 0.0f;
@@ -744,7 +744,7 @@ struct LottieTransform : LottieObject
 
     SeparateCoord* coords = nullptr;       //either a position or separate coordinates
 
-    struct Dimension3
+    struct Dimension3 : Allocator
     {
         LottieFloat rx = 0.0f, ry = 0.0f;  // use the rotation for z rotation
         LottieScalar3 orient = {};
@@ -1147,7 +1147,7 @@ struct LottieLayer : LottieRootLayer
 
     LottieRenderPooler<tvg::Shape> statical;  //static pooler for solid fill and clipper
 
-    struct AudioControl {
+    struct AudioControl : Allocator {
         LottieFloat volume = 100.0f;
         float prevVolume = -1.0f;
         bool prevActive = false;
@@ -1194,7 +1194,7 @@ struct LottieLayer : LottieRootLayer
 
 #undef OVERRIDE
 
-struct LottieSlot
+struct LottieSlot : Allocator
 {
     struct Pair
     {
@@ -1230,7 +1230,7 @@ struct LottieSlot
 };
 
 
-struct LottieComposition
+struct LottieComposition : Allocator
 {
     ~LottieComposition();
 

@@ -67,7 +67,7 @@ enum
 // Derive from this class to read input data from sources other than files or memory. Set m_eof_flag to true when no more data is available.
 // The decoder is rather greedy: it will keep on calling this method until its internal input buffer is full, or until the EOF flag is set.
 // It the input stream contains data after the JPEG stream's EOI (end of image) marker it will probably be pulled into the internal buffer.
-struct jpeg_decoder_stream
+struct jpeg_decoder_stream : Allocator
 {
     jpeg_decoder_stream() { }
     virtual ~jpeg_decoder_stream() { }
@@ -116,7 +116,7 @@ public:
   };
 
 
-class jpeg_decoder
+class jpeg_decoder : public Allocator
 {
 public:
     // Call get_error_code() after constructing to determine if the stream is valid or not. You may call the get_width(), get_height(), etc.

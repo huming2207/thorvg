@@ -38,7 +38,7 @@ namespace tvg
 
 #ifdef THORVG_THREAD_SUPPORT
 
-struct TaskQueue
+struct TaskQueue : Allocator
 {
     Inlist<Task>             taskDeque;
     mutex                    mtx;
@@ -101,7 +101,7 @@ struct TaskQueue
     }
 };
 
-struct TaskSchedulerImpl
+struct TaskSchedulerImpl : Allocator
 {
     Array<thread*>                 threads;
     Array<TaskQueue*>              taskQueues;
@@ -195,7 +195,7 @@ struct TaskSchedulerImpl
 
 #else //THORVG_THREAD_SUPPORT
 
-struct TaskSchedulerImpl
+struct TaskSchedulerImpl : Allocator
 {
     TaskSchedulerImpl(TVG_UNUSED uint32_t threadCnt) {}
     void request(Task* task) { task->run(0); }
