@@ -9,6 +9,8 @@ extern "C" int externalDestroy(void* ptr, bool array);
 
 static unsigned allocations = 0;
 static unsigned deallocations = 0;
+static unsigned customAllocations = 0;
+static unsigned customDeallocations = 0;
 
 //A host application must be able to provide these without colliding with ThorVG.
 void* operator new(std::size_t size)
@@ -94,7 +96,24 @@ struct ThrowingObject : AllocatedObject
 int main()
 {
     static_assert(std::is_empty<tvg::Allocator>::value, "Allocator must not store per-object state");
-    CHECK(tvg::Initializer::init(0) == tvg::Result::Success);
+    tvg::HeapAllocator allocator;
+    allocator.alloc = [](size_t size) -> void* {
+        ++customAllocations;
+        return std::malloc(size);
+    };
+    allocator.calloc = [](size_t count, size_t size) -> void* {
+        ++customAllocations;
+        return std::calloc(count, size);
+    };
+    allocator.realloc = [](void* ptr, size_t size) -> void* {
+        ++customAllocations;
+        return std::realloc(ptr, size);
+    };
+    allocator.free = [](void* ptr) {
+        if (ptr) ++customDeallocations;
+        std::free(ptr);
+    };
+    CHECK(tvg::Initializer::init(0, allocator) == tvg::Result::Success);
 
     auto beforeAlloc = allocations;
     auto beforeFree = deallocations;
@@ -105,6 +124,8 @@ int main()
     CHECK(allocations == beforeAlloc + 2);
     CHECK(deallocations == beforeFree + 2);
 
+    auto beforeCustomAlloc = customAllocations;
+    auto beforeCustomFree = customDeallocations;
     beforeAlloc = allocations;
     beforeFree = deallocations;
     AllocatedBase* object = new AllocatedObject;
@@ -187,6 +208,8 @@ int main()
     delete saver;
     CHECK(allocations == beforeAlloc);
     CHECK(deallocations == beforeFree);
+    CHECK(customAllocations > beforeCustomAlloc);
+    CHECK(customDeallocations > beforeCustomFree);
 
     CHECK(tvg::Initializer::term() == tvg::Result::Success);
     return 0;
