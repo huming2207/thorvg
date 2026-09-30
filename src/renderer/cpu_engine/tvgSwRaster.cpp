@@ -158,6 +158,9 @@ static bool _compositeMaskImage(SwSurface* surface, const SwImage& image, const 
 #include "tvgSwRasterC.h"
 #include "tvgSwRasterAvx.h"
 #include "tvgSwRasterNeon.h"
+#ifdef THORVG_ESP_PIE_V2_SUPPORT
+    #include "tvgSwRasterEspPie.h"  //provided by esp-thorvg, outside of this tree
+#endif
 
 static inline uint32_t _sampleSize(float scale)
 {
@@ -324,6 +327,8 @@ static bool _rasterTranslucentRect(SwSurface* surface, const RenderRegion& bbox,
     return avxRasterTranslucentRect(surface, bbox, c);
 #elif defined(THORVG_NEON_SUPPORT)
     return neonRasterTranslucentRect(surface, bbox, c);
+#elif defined(THORVG_ESP_PIE_V2_SUPPORT)
+    return espPieRasterTranslucentRect(surface, bbox, c);
 #else
     return cRasterTranslucentRect(surface, bbox, c);
 #endif
@@ -495,6 +500,8 @@ static bool _rasterTranslucentRle(SwSurface* surface, const SwRle* rle, const Re
     return avxRasterTranslucentRle(surface, rle, bbox, c);
 #elif defined(THORVG_NEON_SUPPORT)
     return neonRasterTranslucentRle(surface, rle, bbox, c);
+#elif defined(THORVG_ESP_PIE_V2_SUPPORT)
+    return espPieRasterTranslucentRle(surface, rle, bbox, c);
 #else
     return cRasterTranslucentRle(surface, rle, bbox, c);
 #endif
@@ -1321,6 +1328,8 @@ void rasterPixel32(uint32_t *dst, uint32_t val, uint32_t offset, int32_t len)
     avxRasterPixel32(dst, val, offset, len);
 #elif defined(THORVG_NEON_SUPPORT)
     neonRasterPixel32(dst, val, offset, len);
+#elif defined(THORVG_ESP_PIE_V2_SUPPORT)
+    espPieRasterPixel32(dst, val, offset, len);
 #else
     cRasterPixels(dst, val, offset, len);
 #endif
