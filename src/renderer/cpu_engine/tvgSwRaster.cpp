@@ -1321,6 +1321,7 @@ template<typename F>
 static bool _rasterFmtDirectImage(SwSurface* surface, const SwImage& image, const RenderRegion& bbox, int32_t w, int32_t h, uint8_t opacity)
 {
     if (_fmtMasking(surface)) return false;
+    if (w <= 0) return true;  // the span length is unsigned
 
     auto sbuffer = image.buf32 + (bbox.yMin + image.oy) * image.stride + (bbox.xMin + image.ox);
     auto dbuffer = F::buffer(surface) + (bbox.yMin * surface->stride) + bbox.xMin;

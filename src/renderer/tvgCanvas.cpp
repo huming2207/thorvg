@@ -140,7 +140,7 @@ Result SwCanvas::target(uint32_t* buffer, uint32_t stride, uint32_t w, uint32_t 
     pImpl->status = Status::Damaged;  // Paints must be updated again with this new target.
 
     //FIXME: The value must be associated with an individual canvas instance.
-    BitmapLoader::cs = static_cast<ColorSpace>(cs);
+    BitmapLoader::cs = pImpl->renderer->colorSpace();  // decoding colorspace, differs from the target for Grayscale8 and Rgb565
 
     return Result::Success;
 #endif
