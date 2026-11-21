@@ -294,14 +294,21 @@ Result SwRenderer::target(pixel_t* data, uint32_t stride, uint32_t w, uint32_t h
 
     if (!surface) surface = new SwSurface;
 
-    // Grayscale8 composes the sources by a scanline. Reserve it here to avoid the allocations during the rendering.
+    // Grayscale8 composes the sources by a scanline per thread. Reserve them here to avoid the allocations during the rendering.
     if (cs == ColorSpace::Grayscale8) {
-        auto line = tvg::realloc<uint32_t>(surface->line, w * sizeof(uint32_t));
+#ifdef THORVG_OPENMP_SUPPORT
+        uint32_t cnt = omp_get_max_threads();
+#else
+        uint32_t cnt = 1;
+#endif
+        auto line = tvg::realloc<uint32_t>(surface->line, w * cnt * sizeof(uint32_t));
         if (!line) return Result::FailedAllocation;
         surface->line = line;
+        surface->lineCnt = cnt;
     } else {
         tvg::free(surface->line);
         surface->line = nullptr;
+        surface->lineCnt = 0;
     }
 
     surface->data = data;
