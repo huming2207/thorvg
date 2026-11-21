@@ -1253,6 +1253,7 @@ static bool _rasterDirectBlendingImage(SwSurface* surface, const SwImage& image,
 static bool _rasterGrayDirectImage(SwSurface* surface, const SwImage& image, const RenderRegion& bbox, int32_t w, int32_t h, uint8_t opacity)
 {
     if (_grayMasking(surface)) return false;
+    if (w <= 0) return true;  // the span length is unsigned
 
     auto sbuffer = image.buf32 + (bbox.yMin + image.oy) * image.stride + (bbox.xMin + image.ox);
     auto dbuffer = surface->buf8 + (bbox.yMin * surface->stride) + bbox.xMin;
