@@ -713,3 +713,66 @@ void neonRasterGaussianXYFlipBlock(const uint32_t* src, uint32_t* dst, int32_t s
 }
 
 #endif
+
+
+/************************************************************************/
+/* ESP32 PIE                                                            */
+/************************************************************************/
+
+#ifdef THORVG_ESP_PIE_SUPPORT
+
+#include "tvgSwRasterPie.h"
+
+void pieRasterSolidPixel32(uint32_t* dst, uint32_t val, uint32_t offset, int32_t len)
+{
+    if (len > 0) pieFill32(dst + offset, val, len);
+}
+
+bool pieRasterTranslucentRect(SwSurface* surface, const RenderRegion& bbox, const RenderColor& c)
+{
+    auto h = bbox.h();
+    auto w = bbox.w();
+
+    // 32bits channels
+    if (surface->channelSize == sizeof(uint32_t)) {
+        auto color = surface->join(c.r, c.g, c.b, c.a);
+        auto buffer = surface->buf32 + (bbox.yMin * surface->stride) + bbox.xMin;
+        for (uint32_t y = 0; y < h; ++y, buffer += surface->stride) {
+            pieBlend32(buffer, color, w);
+        }
+    // 8bit grayscale
+    } else if (surface->channelSize == sizeof(uint8_t)) {
+        auto buffer = surface->buf8 + (bbox.yMin * surface->stride) + bbox.xMin;
+        for (uint32_t y = 0; y < h; ++y, buffer += surface->stride) {
+            pieBlend8(buffer, c.a, c.a, w);
+        }
+    }
+    return true;
+}
+
+bool pieRasterTranslucentRle(SwSurface* surface, const SwRle* rle, const RenderRegion& bbox, const RenderColor& c)
+{
+    const SwSpan* end;
+    int32_t x, len;
+
+    // 32bit channels
+    if (surface->channelSize == sizeof(uint32_t)) {
+        auto color = surface->join(c.r, c.g, c.b, c.a);
+        for (auto span = rle->fetch(bbox, &end); span < end; ++span) {
+            if (!span->fetch(bbox, x, len)) continue;
+            auto src = (span->coverage < 255) ? ALPHA_BLEND(color, span->coverage) : color;
+            pieBlend32(&surface->buf32[span->y * surface->stride + x], src, len);
+        }
+    // 8bit grayscale
+    } else if (surface->channelSize == sizeof(uint8_t)) {
+        for (auto span = rle->fetch(bbox, &end); span < end; ++span) {
+            if (!span->fetch(bbox, x, len)) continue;
+            auto src = (span->coverage < 255) ? MULTIPLY(span->coverage, c.a) : c.a;
+            pieBlend8(&surface->buf8[span->y * surface->stride + x], src, c.a, len);
+        }
+    }
+    return true;
+}
+
+#endif
+

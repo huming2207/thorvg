@@ -21,6 +21,9 @@
  */
 
 #include "tvgSwRasterCore.h"
+#ifdef THORVG_ESP_PIE_SUPPORT
+    #include "tvgSwRasterPie.h"
+#endif
 
 /************************************************************************/
 /* Helpers                                                              */
@@ -182,6 +185,17 @@ struct SwGray8
         return pack(s) + MULTIPLY(d, IA(s));
     }
 
+    static void blend(Pixel* dst, uint32_t s, uint32_t len)
+    {
+#ifdef THORVG_ESP_PIE_SUPPORT
+        pieBlend8(dst, pack(s), A(s), len);
+#else
+        for (auto end = dst + len; dst < end; ++dst) {
+            *dst = blend(s, *dst);
+        }
+#endif
+    }
+
     static Pixel interpolate(Pixel s, Pixel d, uint8_t a)
     {
         return INTERPOLATE8(s, d, a);
@@ -220,6 +234,13 @@ struct SwRgb565
         return pack(s + ALPHA_BLEND(unpack(d), IA(s)));
     }
 
+    static void blend(Pixel* dst, uint32_t s, uint32_t len)
+    {
+        for (auto end = dst + len; dst < end; ++dst) {
+            *dst = blend(s, *dst);
+        }
+    }
+
     static Pixel interpolate(Pixel s, Pixel d, uint8_t a)
     {
         return pack(INTERPOLATE(unpack(s), unpack(d), a));
@@ -227,9 +248,13 @@ struct SwRgb565
 
     static void fill(Pixel* dst, Pixel val, uint32_t len)
     {
+#ifdef THORVG_ESP_PIE_SUPPORT
+        pieFill16(dst, val, len);
+#else
         for (auto end = dst + len; dst < end; ++dst) {
             *dst = val;
         }
+#endif
     }
 };
 
@@ -531,9 +556,7 @@ static bool _rasterFmtRect(SwSurface* surface, const RenderRegion& bbox, const R
 
     // translucent
     for (uint32_t y = 0; y < bbox.h(); ++y, buffer += surface->stride) {
-        for (auto dst = buffer; dst < buffer + bbox.w(); ++dst) {
-            *dst = F::blend(color, *dst);
-        }
+        F::blend(buffer, color, bbox.w());
     }
     return true;
 }
@@ -743,11 +766,7 @@ static bool _rasterFmtRle(SwSurface* surface, const SwRle* rle, const RenderRegi
         auto src = (span->coverage == 255) ? color : ALPHA_BLEND(color, span->coverage);
         auto dst = F::buffer(surface) + span->y * surface->stride + x;
         if (A(src) == 255) F::fill(dst, F::pack(src), len);
-        else {
-            for (auto x = 0; x < len; ++x, ++dst) {
-                *dst = F::blend(src, *dst);
-            }
-        }
+        else F::blend(dst, src, len);
     }
     return true;
 }

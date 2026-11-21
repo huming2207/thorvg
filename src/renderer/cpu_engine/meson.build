@@ -56,12 +56,24 @@ if get_option('simd')
             simd_type = neon_type
             config_h.set10('THORVG_NEON_SUPPORT', true)
         endif
+    # ESP32-P4/S31 PIE, available when the toolchain targets the Xespv extension (-march=..._xespv)
+    elif cpu_family == 'riscv32'
+        if cpp.compiles('''
+            int main() {
+                asm volatile("esp.zero.q q0");
+                return 0;
+            }
+        ''', name: 'ESP PIE raster support')
+            simd_type = 'esp-pie'
+            config_h.set10('THORVG_ESP_PIE_SUPPORT', true)
+        endif
     endif
 endif
 
 source_file = [
    'tvgSwCommon.h',
    'tvgSwRasterCore.h',
+   'tvgSwRasterPie.h',
    'tvgSwRasterTexmap.h',
    'tvgSwRenderer.h',
    'tvgSwBlendOp.cpp',
