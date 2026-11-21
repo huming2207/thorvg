@@ -80,6 +80,7 @@ struct RenderSurface : Allocator
         pixel_t* data = nullptr;    //system based data pointer
         uint32_t* buf32;            //for explicit 32bits channels
         uint8_t*  buf8;             //for explicit 8bits grayscale
+        uint16_t* buf16;            // for explicit 16bits channels
     };
     Key key;                        //a reserved lock for the thread safety
     uint32_t stride = 0;
@@ -748,6 +749,8 @@ static inline uint8_t CHANNEL_SIZE(ColorSpace cs)
             return sizeof(uint32_t);
         case ColorSpace::Grayscale8:
             return sizeof(uint8_t);
+        case ColorSpace::Rgb565:
+            return sizeof(uint16_t);
         case ColorSpace::Unknown:
         default:
             TVGERR("RENDERER", "Unsupported Channel Size! = %d", (int)cs);

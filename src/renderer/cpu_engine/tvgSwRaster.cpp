@@ -155,7 +155,7 @@ static inline void _rasterPixel8(uint8_t *dst, uint8_t val, uint32_t offset, int
     memset(dst + offset, val, len);
 }
 
-/* Formatted targets (Grayscale8) have no alpha channel, they are not the 8 bits mask surfaces.
+/* Formatted targets (Grayscale8, Rgb565) have no alpha channel, they are not the 8 bits mask surfaces.
    Sources are kept in the premultiplied abgr then converted to the target format at the composition. */
 struct SwGray8
 {
@@ -190,6 +190,46 @@ struct SwGray8
     static void fill(Pixel* dst, Pixel val, uint32_t len)
     {
         memset(dst, val, len);
+    }
+};
+
+struct SwRgb565
+{
+    using Pixel = uint16_t;
+
+    static Pixel* buffer(const SwSurface* surface)
+    {
+        return surface->buf16;
+    }
+
+    // truncated, so that pack(unpack(p)) keeps the pixel
+    static Pixel pack(uint32_t c)
+    {
+        return ((C3(c) >> 3) << 11) | ((C2(c) >> 2) << 5) | (C1(c) >> 3);
+    }
+
+    static uint32_t unpack(Pixel p)
+    {
+        uint8_t r = p >> 11, g = (p >> 5) & 0x3f, b = p & 0x1f;
+        return JOIN(255, (b << 3) | (b >> 2), (g << 2) | (g >> 4), (r << 3) | (r >> 2));
+    }
+
+    // premultiplied source over
+    static Pixel blend(uint32_t s, Pixel d)
+    {
+        return pack(s + ALPHA_BLEND(unpack(d), IA(s)));
+    }
+
+    static Pixel interpolate(Pixel s, Pixel d, uint8_t a)
+    {
+        return pack(INTERPOLATE(unpack(s), unpack(d), a));
+    }
+
+    static void fill(Pixel* dst, Pixel val, uint32_t len)
+    {
+        for (auto end = dst + len; dst < end; ++dst) {
+            *dst = val;
+        }
     }
 };
 
@@ -501,6 +541,7 @@ static bool _rasterFmtRect(SwSurface* surface, const RenderRegion& bbox, const R
 static bool _rasterRect(SwSurface* surface, const RenderRegion& bbox, const RenderColor& c)
 {
     if (surface->cs == ColorSpace::Grayscale8) return _rasterFmtRect<SwGray8>(surface, bbox, c);
+    if (surface->cs == ColorSpace::Rgb565) return _rasterFmtRect<SwRgb565>(surface, bbox, c);
     if (_compositing(surface)) {
         if (_matting(surface)) return _rasterMattedRect(surface, bbox, c);
         return _rasterMaskedRect(surface, bbox, c);
@@ -716,6 +757,7 @@ static bool _rasterRle(SwSurface* surface, SwRle* rle, const RenderRegion& bbox,
     if (!rle || rle->invalid()) return false;
 
     if (surface->cs == ColorSpace::Grayscale8) return _rasterFmtRle<SwGray8>(surface, rle, bbox, c);
+    if (surface->cs == ColorSpace::Rgb565) return _rasterFmtRle<SwRgb565>(surface, rle, bbox, c);
     if (_compositing(surface)) {
         if (_matting(surface)) return _rasterMattedRle(surface, rle, bbox, c);
         return _rasterMaskedRle(surface, rle, bbox, c);
@@ -1014,6 +1056,7 @@ static bool _rasterScaledImageDispatch(SwSurface* surface, const SwImage& image,
     if (!inverse(&transform, &itransform)) return true;
 
     if (surface->cs == ColorSpace::Grayscale8) return (Rle ? _rasterFmtScaledRleImage<SwGray8> : _rasterFmtScaledImage<SwGray8>)(surface, image, &itransform, bbox, opacity);
+    if (surface->cs == ColorSpace::Rgb565) return (Rle ? _rasterFmtScaledRleImage<SwRgb565> : _rasterFmtScaledImage<SwRgb565>)(surface, image, &itransform, bbox, opacity);
     if (_compositing(surface)) {
         if (_matting(surface)) return (Rle ? _rasterScaledMattedRleImage : _rasterScaledMattedImage)(surface, image, &itransform, bbox, opacity);
         return (Rle ? _rasterScaledMaskedRleImage : _rasterScaledMaskedImage)(surface, image, &itransform, bbox, opacity);
@@ -1417,6 +1460,7 @@ static bool _rasterFmtGradientRect(SwSurface* surface, const RenderRegion& bbox,
 static bool _rasterGradientRect(SwSurface* surface, const RenderRegion& bbox, const SwFill* fill)
 {
     if (surface->cs == ColorSpace::Grayscale8) return _rasterFmtGradientRect<SwGray8>(surface, bbox, fill);
+    if (surface->cs == ColorSpace::Rgb565) return _rasterFmtGradientRect<SwRgb565>(surface, bbox, fill);
     if (_compositing(surface)) {
         if (_matting(surface)) return _rasterGradientMattedRect(surface, bbox, fill);
         return _rasterGradientMaskedRect(surface, bbox, fill);
@@ -1557,6 +1601,7 @@ static bool _rasterFmtGradientRle(SwSurface* surface, const SwRle* rle, const Sw
 static bool _rasterGradientRle(SwSurface* surface, const SwRle* rle, const SwFill* fill)
 {
     if (surface->cs == ColorSpace::Grayscale8) return _rasterFmtGradientRle<SwGray8>(surface, rle, fill);
+    if (surface->cs == ColorSpace::Rgb565) return _rasterFmtGradientRle<SwRgb565>(surface, rle, fill);
     if (_compositing(surface)) {
         if (_matting(surface)) return _rasterGradientMattedRle(surface, rle, fill);
         return _rasterGradientMaskedRle(surface, rle, fill);
@@ -1577,8 +1622,8 @@ Result rasterCompositor(SwSurface* surface)
     surface->alphas[0] = _alpha;
     surface->alphas[1] = _ialpha;
 
-    // Grayscale8 composes the sources in the abgr colorspace.
-    if (surface->cs == ColorSpace::ABGR8888 || surface->cs == ColorSpace::ABGR8888S || surface->cs == ColorSpace::Grayscale8) {
+    // Grayscale8 and Rgb565 compose the sources in the abgr colorspace.
+    if (surface->cs == ColorSpace::ABGR8888 || surface->cs == ColorSpace::ABGR8888S || surface->cs == ColorSpace::Grayscale8 || surface->cs == ColorSpace::Rgb565) {
         surface->join = _abgrJoin;
         surface->alphas[2] = _abgrLuma;
         surface->alphas[3] = _abgrInvLuma;
@@ -1596,6 +1641,14 @@ Result rasterCompositor(SwSurface* surface)
 bool rasterClear(SwSurface* surface, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
     if (!surface || !surface->buf32 || surface->stride == 0 || surface->w == 0 || surface->h == 0) return false;
+
+    // 16 bits
+    if (surface->channelSize == sizeof(uint16_t)) {
+        for (uint32_t i = 0; i < h; i++) {
+            memset(surface->buf16 + surface->stride * (y + i) + x, 0x00, w * sizeof(uint16_t));
+        }
+        return true;
+    }
 
     //32 bits
     if (surface->channelSize == sizeof(uint32_t)) {
@@ -1668,6 +1721,7 @@ bool rasterDirectImage(SwSurface* surface, const SwImage& image, const RenderReg
     auto h = std::min(bbox.yMax - bbox.yMin, int32_t(image.h) - (bbox.yMin + image.oy));
 
     if (surface->cs == ColorSpace::Grayscale8) return _rasterFmtDirectImage<SwGray8>(surface, image, bbox, w, h, opacity);
+    if (surface->cs == ColorSpace::Rgb565) return _rasterFmtDirectImage<SwRgb565>(surface, image, bbox, w, h, opacity);
     if (_compositing(surface)) {
         if (_matting(surface)) {
             if (_blending(surface)) return _rasterDirectMattedBlendingImage(surface, image, surface->compositor, bbox, w, h, opacity);
@@ -1682,6 +1736,7 @@ bool rasterDirectImage(SwSurface* surface, const SwImage& image, const RenderReg
 bool rasterDirectRleImage(SwSurface* surface, const SwImage& image, const RenderRegion& bbox, uint8_t opacity)
 {
     if (surface->cs == ColorSpace::Grayscale8) return _rasterFmtDirectRleImage<SwGray8>(surface, image, bbox, opacity);
+    if (surface->cs == ColorSpace::Rgb565) return _rasterFmtDirectRleImage<SwRgb565>(surface, image, bbox, opacity);
     if (surface->channelSize == sizeof(uint8_t)) {
         TVGERR("SW_ENGINE", "Not supported grayscale rle image!");
         return false;

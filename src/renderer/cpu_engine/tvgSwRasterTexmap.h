@@ -177,6 +177,10 @@ static void _rasterBlendingPolygonImageSegment(TexmapCtx& ctx, int yStart, int y
         _rasterPolygonImageSegmentFmt<SwGray8>(ctx, yStart, yEnd, needAA);
         return;
     }
+    if (ctx.surface->cs == ColorSpace::Rgb565) {
+        _rasterPolygonImageSegmentFmt<SwRgb565>(ctx, yStart, yEnd, needAA);
+        return;
+    }
 
     if (ctx.surface->channelSize == sizeof(uint8_t)) {
         TVGERR("SW_ENGINE", "Not supported grayscale Textmap polygon!");
@@ -444,6 +448,7 @@ static void _rasterPolygonImageSegment8(TexmapCtx& ctx, int yStart, int yEnd, TV
 static void _rasterPolygonImageSegment(TexmapCtx& ctx, int yStart, int yEnd, bool matting, bool needAA)
 {
     if (ctx.surface->cs == ColorSpace::Grayscale8) _rasterPolygonImageSegmentFmt<SwGray8>(ctx, yStart, yEnd, needAA);
+    else if (ctx.surface->cs == ColorSpace::Rgb565) _rasterPolygonImageSegmentFmt<SwRgb565>(ctx, yStart, yEnd, needAA);
     else if (ctx.surface->channelSize == sizeof(uint32_t)) _rasterPolygonImageSegment32(ctx, yStart, yEnd, matting, needAA);
     else if (ctx.surface->channelSize == sizeof(uint8_t)) _rasterPolygonImageSegment8(ctx, yStart, yEnd, needAA);
 }

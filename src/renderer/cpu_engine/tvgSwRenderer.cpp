@@ -288,14 +288,14 @@ bool SwRenderer::sync()
 Result SwRenderer::target(pixel_t* data, uint32_t stride, uint32_t w, uint32_t h, ColorSpace cs)
 {
     if (!data || stride == 0 || w == 0 || h == 0 || w > stride) return Result::InvalidArguments;
-    if (cs != ColorSpace::ABGR8888 && cs != ColorSpace::ABGR8888S && cs != ColorSpace::ARGB8888 && cs != ColorSpace::ARGB8888S && cs != ColorSpace::Grayscale8) return Result::NonSupport;
+    if (cs != ColorSpace::ABGR8888 && cs != ColorSpace::ABGR8888S && cs != ColorSpace::ARGB8888 && cs != ColorSpace::ARGB8888S && cs != ColorSpace::Grayscale8 && cs != ColorSpace::Rgb565) return Result::NonSupport;
 
     clearCompositors();
 
     if (!surface) surface = new SwSurface;
 
-    // Grayscale8 composes the sources by a scanline per thread. Reserve them here to avoid the allocations during the rendering.
-    if (cs == ColorSpace::Grayscale8) {
+    // Grayscale8 and Rgb565 compose the sources by a scanline per thread. Reserve them here to avoid the allocations during the rendering.
+    if (cs == ColorSpace::Grayscale8 || cs == ColorSpace::Rgb565) {
 #ifdef THORVG_OPENMP_SUPPORT
         uint32_t cnt = omp_get_max_threads();
 #else
@@ -855,8 +855,8 @@ void SwRenderer::dispose(RenderEffect* effect)
 
 ColorSpace SwRenderer::colorSpace()
 {
-    // Grayscale8 has no alpha channel, composes the translucent layers in the abgr colorspace.
-    if (surface) return (surface->cs == ColorSpace::Grayscale8) ? ColorSpace::ABGR8888 : surface->cs;
+    // Grayscale8 and Rgb565 have no alpha channel, compose the translucent layers in the abgr colorspace.
+    if (surface) return (surface->cs == ColorSpace::Grayscale8 || surface->cs == ColorSpace::Rgb565) ? ColorSpace::ABGR8888 : surface->cs;
     else return ColorSpace::Unknown;
 }
 
