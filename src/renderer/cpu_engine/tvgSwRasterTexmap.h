@@ -154,7 +154,7 @@ static void _rasterPolygonImageSegmentFmt(TexmapCtx& ctx, int yStart, int yEnd, 
                 u += _dudx;
                 v += _dvdx;
             }
-            _rasterFmtPixels<F>(ctx.surface, F::buffer(ctx.surface) + (y * ctx.surface->stride) + x1, line, _fmtCmp(ctx.surface, x1, y), buf - line, ctx.opacity, false);
+            _rasterFmtPixels<F>(ctx.surface, F::buffer(ctx.surface) + (y * ctx.surface->stride) + x1, line, _fmtCmp(ctx.surface, x1, y), buf - line, ctx.opacity, false, !_compositing(ctx.surface) && _blending(ctx.surface));
         }
 
         // Step along both edges
