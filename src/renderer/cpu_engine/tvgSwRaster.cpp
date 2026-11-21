@@ -226,23 +226,24 @@ static inline typename F::Pixel _fmtBlender(const SwSurface* surface, uint32_t s
     return F::pack(surface->blender(surface, s, F::unpack(d)));
 }
 
-// compose the premultiplied abgr pixels to the formatted target with the matting compositor(cmp) if any
+// compose the premultiplied abgr pixels to the formatted target with the matting compositor(cmp) if any,
+// the blending follows the 32 bits image paths
 template<typename F>
-static void _rasterFmtPixels(SwSurface* surface, typename F::Pixel* dst, const uint32_t* src, uint8_t* cmp, uint32_t len, uint8_t opacity, bool alphaIgnored)
+static void _rasterFmtPixels(SwSurface* surface, typename F::Pixel* dst, const uint32_t* src, uint8_t* cmp, uint32_t len, uint8_t opacity, bool alphaIgnored, bool blending)
 {
     if (cmp) {
         auto csize = surface->compositor->image.channelSize;
         auto alpha = surface->alpha(surface->compositor->method);
-        if (_blending(surface)) {
+        if (blending) {
             for (uint32_t x = 0; x < len; ++x, ++dst, ++src, cmp += csize) {
-                *dst = F::interpolate(_fmtBlender<F>(surface, UNPREMULTIPLY(*src), *dst), *dst, MULTIPLY(MULTIPLY(A(*src), alpha(cmp)), opacity));
+                *dst = F::interpolate(_fmtBlender<F>(surface, *src, *dst), *dst, MULTIPLY(MULTIPLY(A(*src), alpha(cmp)), opacity));
             }
         } else {
             for (uint32_t x = 0; x < len; ++x, ++dst, ++src, cmp += csize) {
                 *dst = F::blend(ALPHA_BLEND(*src, MULTIPLY(opacity, alpha(cmp))), *dst);
             }
         }
-    } else if (_blending(surface)) {
+    } else if (blending) {
         for (uint32_t x = 0; x < len; ++x, ++dst, ++src) {
             *dst = F::interpolate(_fmtBlender<F>(surface, UNPREMULTIPLY(*src), *dst), *dst, MULTIPLY(opacity, A(*src)));
         }
@@ -266,6 +267,17 @@ static void _rasterFmtPixels(SwSurface* surface, typename F::Pixel* dst, const u
                 *dst = F::blend(ALPHA_BLEND(*src, opacity), *dst);
             }
         }
+    }
+}
+
+// blend the premultiplied abgr pixels as the 32 bits shape and gradient paths do: the blender takes op(src, dst) as it is
+template<typename F>
+static void _rasterFmtBlendingPixels(SwSurface* surface, typename F::Pixel* dst, const uint32_t* src, uint32_t len, SwBlenderA op, uint8_t a)
+{
+    for (uint32_t x = 0; x < len; ++x, ++dst, ++src) {
+        auto d = F::unpack(*dst);
+        auto tmp = surface->blender(surface, op(*src, d, 255), d);
+        *dst = F::pack((a == 255) ? tmp : INTERPOLATE(tmp, d, a));
     }
 }
 
@@ -450,11 +462,20 @@ static bool _rasterFmtRect(SwSurface* surface, const RenderRegion& bbox, const R
     auto color = surface->join(c.r, c.g, c.b, c.a);
     auto buffer = F::buffer(surface) + (bbox.yMin * surface->stride) + bbox.xMin;
 
-    // matting, blending
-    if (_compositing(surface) || _blending(surface)) {
+    // matting (blending is ignored as the 32 bits path does)
+    if (_compositing(surface)) {
         rasterSolidPixel32(surface->line, color, 0, bbox.w());
         for (uint32_t y = 0; y < bbox.h(); ++y, buffer += surface->stride) {
-            _rasterFmtPixels<F>(surface, buffer, surface->line, _fmtCmp(surface, bbox.xMin, bbox.yMin + y), bbox.w(), 255, false);
+            _rasterFmtPixels<F>(surface, buffer, surface->line, _fmtCmp(surface, bbox.xMin, bbox.yMin + y), bbox.w(), 255, false, false);
+        }
+        return true;
+    }
+
+    // blending
+    if (_blending(surface)) {
+        rasterSolidPixel32(surface->line, color, 0, bbox.w());
+        for (uint32_t y = 0; y < bbox.h(); ++y, buffer += surface->stride) {
+            _rasterFmtBlendingPixels<F>(surface, buffer, surface->line, bbox.w(), opBlendSrcOver, 255);
         }
         return true;
     }
@@ -663,12 +684,14 @@ static bool _rasterFmtRle(SwSurface* surface, const SwRle* rle, const RenderRegi
     const SwSpan* end;
     int32_t x, len;
 
-    // matting, blending
+    // matting (blending is ignored as the 32 bits path does), blending
     if (_compositing(surface) || _blending(surface)) {
         rasterSolidPixel32(surface->line, color, 0, bbox.w());
         for (auto span = rle->fetch(bbox, &end); span < end; ++span) {
             if (!span->fetch(bbox, x, len)) continue;
-            _rasterFmtPixels<F>(surface, F::buffer(surface) + span->y * surface->stride + x, surface->line, _fmtCmp(surface, x, span->y), len, span->coverage, false);
+            auto dst = F::buffer(surface) + span->y * surface->stride + x;
+            if (_compositing(surface)) _rasterFmtPixels<F>(surface, dst, surface->line, _fmtCmp(surface, x, span->y), len, span->coverage, false, false);
+            else _rasterFmtBlendingPixels<F>(surface, dst, surface->line, len, opBlendSrcOver, span->coverage);
         }
         return true;
     }
@@ -956,7 +979,7 @@ static bool _rasterFmtScaledImage(SwSurface* surface, const SwImage& image, cons
             SCALED_IMAGE_RANGE_X
             *src = scaleMethod(image.buf32, image.stride, image.w, image.h, sx, sy, miny, maxy, sampleSize) | amask;
         }
-        _rasterFmtPixels<F>(surface, F::buffer(surface) + y * surface->stride + bbox.xMin, line, _fmtCmp(surface, bbox.xMin, y), bbox.w(), opacity, false);
+        _rasterFmtPixels<F>(surface, F::buffer(surface) + y * surface->stride + bbox.xMin, line, _fmtCmp(surface, bbox.xMin, y), bbox.w(), opacity, false, !_compositing(surface) && _blending(surface));
     }
     return true;
 }
@@ -979,7 +1002,7 @@ static bool _rasterFmtScaledRleImage(SwSurface* surface, const SwImage& image, c
             SCALED_IMAGE_RANGE_X
             *src = scaleMethod(image.buf32, image.stride, image.w, image.h, sx, sy, miny, maxy, sampleSize) | amask;
         }
-        _rasterFmtPixels<F>(surface, F::buffer(surface) + span.y * surface->stride + span.x, surface->line, _fmtCmp(surface, span.x, span.y), span.len, MULTIPLY(span.coverage, opacity), false);
+        _rasterFmtPixels<F>(surface, F::buffer(surface) + span.y * surface->stride + span.x, surface->line, _fmtCmp(surface, span.x, span.y), span.len, MULTIPLY(span.coverage, opacity), false, !_compositing(surface) && _blending(surface));
     }
     return true;
 }
@@ -1089,7 +1112,7 @@ static bool _rasterFmtDirectRleImage(SwSurface* surface, const SwImage& image, c
         if (!span->fetch(bbox, x, len)) continue;
         auto dst = F::buffer(surface) + span->y * surface->stride + x;
         auto img = image.buf32 + (span->y + image.oy) * image.stride + (x + image.ox);
-        _rasterFmtPixels<F>(surface, dst, img, _fmtCmp(surface, x, span->y), len, MULTIPLY(span->coverage, opacity), image.alphaIgnored);
+        _rasterFmtPixels<F>(surface, dst, img, _fmtCmp(surface, x, span->y), len, MULTIPLY(span->coverage, opacity), image.alphaIgnored, !_compositing(surface) && _blending(surface));
     }
     return true;
 }
@@ -1259,7 +1282,7 @@ static bool _rasterFmtDirectImage(SwSurface* surface, const SwImage& image, cons
     auto dbuffer = F::buffer(surface) + (bbox.yMin * surface->stride) + bbox.xMin;
 
     for (auto y = 0; y < h; ++y, dbuffer += surface->stride, sbuffer += image.stride) {
-        _rasterFmtPixels<F>(surface, dbuffer, sbuffer, _fmtCmp(surface, bbox.xMin, bbox.yMin + y), w, opacity, image.alphaIgnored);
+        _rasterFmtPixels<F>(surface, dbuffer, sbuffer, _fmtCmp(surface, bbox.xMin, bbox.yMin + y), w, opacity, image.alphaIgnored, _blending(surface));
     }
     return true;
 }
@@ -1384,7 +1407,9 @@ static bool _rasterFmtGradientRect(SwSurface* surface, const RenderRegion& bbox,
 
     for (uint32_t y = 0; y < bbox.h(); ++y, buffer += surface->stride) {
         fillRaster(fill, surface->line, bbox.yMin + y, bbox.xMin, bbox.w(), opBlendSrcOver, 255);
-        _rasterFmtPixels<F>(surface, buffer, surface->line, _fmtCmp(surface, bbox.xMin, bbox.yMin + y), bbox.w(), 255, !fill->translucent);
+        // matting ignores blending as the 32 bits path does
+        if (!_compositing(surface) && _blending(surface)) _rasterFmtBlendingPixels<F>(surface, buffer, surface->line, bbox.w(), fill->translucent ? opBlendPreNormal : opBlendSrcOver, 255);
+        else _rasterFmtPixels<F>(surface, buffer, surface->line, _fmtCmp(surface, bbox.xMin, bbox.yMin + y), bbox.w(), 255, !fill->translucent, false);
     }
     return true;
 }
@@ -1521,7 +1546,10 @@ static bool _rasterFmtGradientRle(SwSurface* surface, const SwRle* rle, const Sw
 
     for (uint32_t i = 0; i < rle->size(); ++i, ++span) {
         fillRaster(fill, surface->line, span->y, span->x, span->len, opBlendSrcOver, 255);
-        _rasterFmtPixels<F>(surface, F::buffer(surface) + span->y * surface->stride + span->x, surface->line, _fmtCmp(surface, span->x, span->y), span->len, span->coverage, !fill->translucent);
+        auto dst = F::buffer(surface) + span->y * surface->stride + span->x;
+        // matting ignores blending as the 32 bits path does
+        if (!_compositing(surface) && _blending(surface)) _rasterFmtBlendingPixels<F>(surface, dst, surface->line, span->len, opBlendPreNormal, span->coverage);
+        else _rasterFmtPixels<F>(surface, dst, surface->line, _fmtCmp(surface, span->x, span->y), span->len, span->coverage, !fill->translucent, false);
     }
     return true;
 }
