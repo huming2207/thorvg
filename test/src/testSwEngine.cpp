@@ -452,7 +452,8 @@ TEST_CASE("Scene Effects Composition", "[tvgSwEngine]")
         auto maxDiff = [&]() {
             int diff = 0;
             for (uint32_t i = 0; i < W * H; ++i) {
-                for (int s = 0; s < 32; s += 8) diff = std::max(diff, abs(int((direct[i] >> s) & 0xff) - int((indirect[i] >> s) & 0xff)));
+                for (int s = 0; s < 32; s += 8)
+                    diff = std::max(diff, abs(int((direct[i] >> s) & 0xff) - int((indirect[i] >> s) & 0xff)));
             }
             return diff;
         };
@@ -606,12 +607,29 @@ TEST_CASE("Grayscale8 Draw", "[tvgSwEngine]")
         REQUIRE(blend->blend(BlendMethod::Multiply) == Result::Success);
         REQUIRE(canvas->add(blend) == Result::Success);
 
+        // the same gray with opacity keeps the gray (rounded once)
+        auto bg3 = Shape::gen();
+        REQUIRE(bg3->appendRect(20, 20, 10, 10) == Result::Success);
+        REQUIRE(bg3->fill(101, 101, 101) == Result::Success);
+        REQUIRE(canvas->add(bg3) == Result::Success);
+
+        uint32_t gray[10 * 10];
+        for (int i = 0; i < 10 * 10; ++i) {
+            gray[i] = 0xff656565;
+        }
+        auto picture5 = Picture::gen();
+        REQUIRE(picture5->load(gray, 10, 10, 10, ColorSpace::XRGB8888, true) == Result::Success);
+        REQUIRE(picture5->translate(20, 20) == Result::Success);
+        REQUIRE(picture5->opacity(128) == Result::Success);
+        REQUIRE(canvas->add(picture5) == Result::Success);
+
         REQUIRE(canvas->draw(true) == Result::Success);
         REQUIRE(canvas->sync() == Result::Success);
 
         REQUIRE(abs(pixel(5, 5) - 141) <= 1);
         REQUIRE(pixel(50, 50) == 100);
         REQUIRE(pixel(80, 80) == 7);  // blue x gray(100) luminance
+        REQUIRE(pixel(25, 25) == 101);
     }
     REQUIRE(Initializer::term() == Result::Success);
 }
