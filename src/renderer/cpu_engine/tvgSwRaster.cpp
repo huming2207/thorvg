@@ -169,9 +169,10 @@ struct SwGray8
         return surface->buf8;
     }
 
+    // 0.2126*R + 0.7152*G + 0.0722*B, summed to 256 and rounded: grays and white stay exact, never exceeds the alpha
     static Pixel pack(uint32_t c)
     {
-        return ((C3(c) * 54) + (C2(c) * 183) + (C1(c) * 19)) >> 8;  // 0.2126*R + 0.7152*G + 0.0722*B, summed to 256 for the exact white
+        return ((C3(c) * 54) + (C2(c) * 183) + (C1(c) * 19) + 128) >> 8;
     }
 
     static uint32_t unpack(Pixel p)
@@ -179,16 +180,16 @@ struct SwGray8
         return JOIN(255, p, p, p);
     }
 
-    // premultiplied source over
+    // premultiplied source over, rounded as the 32 bits targets do. MULTIPLY() rounds up and stalls the translucent layers.
     static Pixel blend(uint32_t s, Pixel d)
     {
-        return pack(s) + MULTIPLY(d, IA(s));
+        return pack(s) + ALPHA_BLEND(d, IA(s));
     }
 
     static void blend(Pixel* dst, uint32_t s, uint32_t len)
     {
 #ifdef THORVG_ESP_PIE_SUPPORT
-        pieBlend8(dst, pack(s), A(s), len);
+        pieAlphaBlend8(dst, pack(s), A(s), len);
 #else
         for (auto end = dst + len; dst < end; ++dst) {
             *dst = blend(s, *dst);
