@@ -65,6 +65,11 @@ TEST_CASE("Target Buffer", "[tvgSwCanvas]")
         REQUIRE(canvas->target(buffer, 100, 100, 100, ColorSpace::ARGB8888) == Result::Success);
         REQUIRE(canvas->target(buffer, 100, 100, 100, ColorSpace::ARGB8888) == Result::Success);
 
+        // Grayscale8: 1 byte per pixel
+        REQUIRE(canvas->target(buffer, 100, 100, 100, ColorSpace::Grayscale8) == Result::Success);
+        REQUIRE(canvas->target(buffer, 50, 50, 100, ColorSpace::Grayscale8) == Result::Success);
+        REQUIRE(canvas->target(buffer, 100, 100, 100, ColorSpace::ARGB8888) == Result::Success);
+
         REQUIRE(canvas->target(nullptr, 100, 100, 100, ColorSpace::ARGB8888) == Result::InvalidArguments);
         REQUIRE(canvas->target(buffer, 0, 100, 100, ColorSpace::ARGB8888) == Result::InvalidArguments);
         REQUIRE(canvas->target(buffer, 100, 0, 100, ColorSpace::ARGB8888) == Result::InvalidArguments);

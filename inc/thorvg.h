@@ -2497,7 +2497,8 @@ struct TVG_API SwCanvas final : Canvas
      *
      * @warning Do not access @p buffer during Canvas::add() - Canvas::sync(). It should not be accessed while the engine is writing on it.
      *
-     * @note Currently, only @c ColorSpace::ABGR8888S, @c ColorSpace::ABGR8888, @c ColorSpace::ARGB8888S, and @c ColorSpace::ARGB8888 are supported for @p cs.
+     * @note Currently, only @c ColorSpace::ABGR8888S, @c ColorSpace::ABGR8888, @c ColorSpace::ARGB8888S, @c ColorSpace::ARGB8888, and @c ColorSpace::Grayscale8 are supported for @p cs.
+     * @note @c ColorSpace::Grayscale8 is an experimental option. It treats @p buffer as an opaque 1 byte per pixel memory block, and @p stride is counted in pixels. Pass the 8-bit buffer by casting it to @c uint32_t*.
      *
      * @see Canvas::viewport()
      * @see Canvas::sync()

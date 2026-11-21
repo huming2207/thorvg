@@ -198,7 +198,7 @@ struct SwImageTask : SwTask
     void run(unsigned tid) override
     {
         //Convert colorspace if it's not aligned.
-        rasterConvertCS(source, renderer->surface->cs);
+        rasterConvertCS(source, renderer->colorSpace());
         rasterPremultiplySurface(source);
 
         image.data = source->data;
@@ -247,6 +247,7 @@ SwRenderer::~SwRenderer()
 {
     clearCompositors();
 
+    if (surface) tvg::free(surface->line);
     delete(surface);
 
     _rendererMtx.lock();
@@ -287,11 +288,21 @@ bool SwRenderer::sync()
 Result SwRenderer::target(pixel_t* data, uint32_t stride, uint32_t w, uint32_t h, ColorSpace cs)
 {
     if (!data || stride == 0 || w == 0 || h == 0 || w > stride) return Result::InvalidArguments;
-    if (cs != ColorSpace::ABGR8888 && cs != ColorSpace::ABGR8888S && cs != ColorSpace::ARGB8888 && cs != ColorSpace::ARGB8888S) return Result::NonSupport;
+    if (cs != ColorSpace::ABGR8888 && cs != ColorSpace::ABGR8888S && cs != ColorSpace::ARGB8888 && cs != ColorSpace::ARGB8888S && cs != ColorSpace::Grayscale8) return Result::NonSupport;
 
     clearCompositors();
 
     if (!surface) surface = new SwSurface;
+
+    // Grayscale8 composes the sources by a scanline. Reserve it here to avoid the allocations during the rendering.
+    if (cs == ColorSpace::Grayscale8) {
+        auto line = tvg::realloc<uint32_t>(surface->line, w * sizeof(uint32_t));
+        if (!line) return Result::FailedAllocation;
+        surface->line = line;
+    } else {
+        tvg::free(surface->line);
+        surface->line = nullptr;
+    }
 
     surface->data = data;
     surface->stride = stride;
@@ -631,6 +642,7 @@ SwSurface* SwRenderer::request(int channelSize, bool square)
     if (!cmp) {
         //Inherits attributes from main surface
         cmp = new SwSurface(surface);
+        cmp->cs = colorSpace();
         cmp->compositor = new SwCompositor;
         cmp->compositor->image.data = tvg::malloc<pixel_t>(channelSize * w * h);
         cmp->w = cmp->compositor->image.w = w;
@@ -836,7 +848,8 @@ void SwRenderer::dispose(RenderEffect* effect)
 
 ColorSpace SwRenderer::colorSpace()
 {
-    if (surface) return surface->cs;
+    // Grayscale8 has no alpha channel, composes the translucent layers in the abgr colorspace.
+    if (surface) return (surface->cs == ColorSpace::Grayscale8) ? ColorSpace::ABGR8888 : surface->cs;
     else return ColorSpace::Unknown;
 }
 
