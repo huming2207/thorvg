@@ -2502,7 +2502,7 @@ struct TVG_API SwCanvas final : Canvas
      *
      * @note Currently, only @c ColorSpace::ABGR8888S, @c ColorSpace::ABGR8888, @c ColorSpace::ARGB8888S, @c ColorSpace::ARGB8888, @c ColorSpace::Grayscale8, and @c ColorSpace::Rgb565 are supported for @p cs.
      * @note @c ColorSpace::Grayscale8 is an experimental option. It treats @p buffer as an opaque 1 byte per pixel memory block, and @p stride is counted in pixels. Pass the 8-bit buffer by casting it to @c uint32_t*.
-     * @note @c ColorSpace::Rgb565 is an experimental option. It treats @p buffer as an opaque 2 bytes per pixel memory block in the native byte order, and @p stride is counted in pixels. Pass the 16-bit buffer by casting it to @c uint32_t*.
+     * @note @c ColorSpace::Rgb565 is an experimental option. It treats @p buffer as an opaque 2 bytes per pixel memory block in the native byte order, and @p stride is counted in pixels. Pass the 16-bit buffer by casting it to @c uint32_t*. Translucent content is composed over the 5/6/5 bits backdrop, so many stacked low alpha layers or the hue based blendings (e.g. BlendMethod::Saturation) over grays may shift the hue.
      *
      * @see Canvas::viewport()
      * @see Canvas::sync()
