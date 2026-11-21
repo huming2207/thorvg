@@ -204,22 +204,23 @@ static inline uint32_t* _grayLine(const SwSurface* surface)
 #endif
 }
 
-// compose the premultiplied abgr pixels to the gray target with the matting compositor(cmp) if any
-static void _rasterGrayPixels(SwSurface* surface, uint8_t* dst, const uint32_t* src, uint8_t* cmp, uint32_t len, uint8_t opacity, bool alphaIgnored)
+// compose the premultiplied abgr pixels to the gray target with the matting compositor(cmp) if any,
+// the blending follows the 32 bits image paths
+static void _rasterGrayPixels(SwSurface* surface, uint8_t* dst, const uint32_t* src, uint8_t* cmp, uint32_t len, uint8_t opacity, bool alphaIgnored, bool blending)
 {
     if (cmp) {
         auto csize = surface->compositor->image.channelSize;
         auto alpha = surface->alpha(surface->compositor->method);
-        if (_blending(surface)) {
+        if (blending) {
             for (uint32_t x = 0; x < len; ++x, ++dst, ++src, cmp += csize) {
-                *dst = INTERPOLATE8(_grayBlender(surface, UNPREMULTIPLY(*src), *dst), *dst, MULTIPLY(MULTIPLY(A(*src), alpha(cmp)), opacity));
+                *dst = INTERPOLATE8(_grayBlender(surface, *src, *dst), *dst, MULTIPLY(MULTIPLY(A(*src), alpha(cmp)), opacity));
             }
         } else {
             for (uint32_t x = 0; x < len; ++x, ++dst, ++src, cmp += csize) {
                 *dst = _grayBlend(ALPHA_BLEND(*src, MULTIPLY(opacity, alpha(cmp))), *dst);
             }
         }
-    } else if (_blending(surface)) {
+    } else if (blending) {
         for (uint32_t x = 0; x < len; ++x, ++dst, ++src) {
             *dst = INTERPOLATE8(_grayBlender(surface, UNPREMULTIPLY(*src), *dst), *dst, MULTIPLY(opacity, A(*src)));
         }
@@ -243,6 +244,16 @@ static void _rasterGrayPixels(SwSurface* surface, uint8_t* dst, const uint32_t* 
                 *dst = _grayBlend(ALPHA_BLEND(*src, opacity), *dst);
             }
         }
+    }
+}
+
+// blend the premultiplied abgr pixels as the 32 bits shape and gradient paths do: the blender takes op(src, dst) as it is
+static void _rasterGrayBlendingPixels(SwSurface* surface, uint8_t* dst, const uint32_t* src, uint32_t len, SwBlenderA op, uint8_t a)
+{
+    for (uint32_t x = 0; x < len; ++x, ++dst, ++src) {
+        auto d = JOIN(255, *dst, *dst, *dst);
+        auto tmp = surface->blender(surface, op(*src, d, 255), d);
+        *dst = _gray((a == 255) ? tmp : INTERPOLATE(tmp, d, a));
     }
 }
 
@@ -426,11 +437,20 @@ static bool _rasterGrayRect(SwSurface* surface, const RenderRegion& bbox, const 
     auto color = surface->join(c.r, c.g, c.b, c.a);
     auto buffer = surface->buf8 + (bbox.yMin * surface->stride) + bbox.xMin;
 
-    // matting, blending
-    if (_compositing(surface) || _blending(surface)) {
+    // matting (blending is ignored as the 32 bits path does)
+    if (_compositing(surface)) {
         rasterSolidPixel32(surface->line, color, 0, bbox.w());
         for (uint32_t y = 0; y < bbox.h(); ++y, buffer += surface->stride) {
-            _rasterGrayPixels(surface, buffer, surface->line, _grayCmp(surface, bbox.xMin, bbox.yMin + y), bbox.w(), 255, false);
+            _rasterGrayPixels(surface, buffer, surface->line, _grayCmp(surface, bbox.xMin, bbox.yMin + y), bbox.w(), 255, false, false);
+        }
+        return true;
+    }
+
+    // blending
+    if (_blending(surface)) {
+        rasterSolidPixel32(surface->line, color, 0, bbox.w());
+        for (uint32_t y = 0; y < bbox.h(); ++y, buffer += surface->stride) {
+            _rasterGrayBlendingPixels(surface, buffer, surface->line, bbox.w(), opBlendSrcOver, 255);
         }
         return true;
     }
@@ -640,12 +660,14 @@ static bool _rasterGrayRle(SwSurface* surface, const SwRle* rle, const RenderReg
     const SwSpan* end;
     int32_t x, len;
 
-    // matting, blending
+    // matting (blending is ignored as the 32 bits path does), blending
     if (_compositing(surface) || _blending(surface)) {
         rasterSolidPixel32(surface->line, color, 0, bbox.w());
         for (auto span = rle->fetch(bbox, &end); span < end; ++span) {
             if (!span->fetch(bbox, x, len)) continue;
-            _rasterGrayPixels(surface, &surface->buf8[span->y * surface->stride + x], surface->line, _grayCmp(surface, x, span->y), len, span->coverage, false);
+            auto dst = &surface->buf8[span->y * surface->stride + x];
+            if (_compositing(surface)) _rasterGrayPixels(surface, dst, surface->line, _grayCmp(surface, x, span->y), len, span->coverage, false, false);
+            else _rasterGrayBlendingPixels(surface, dst, surface->line, len, opBlendSrcOver, span->coverage);
         }
         return true;
     }
@@ -934,7 +956,7 @@ static bool _rasterGrayScaledImage(SwSurface* surface, const SwImage& image, con
             SCALED_IMAGE_RANGE_X
             *src = scaleMethod(image.buf32, image.stride, image.w, image.h, sx, sy, miny, maxy, sampleSize) | amask;
         }
-        _rasterGrayPixels(surface, surface->buf8 + y * surface->stride + bbox.xMin, line, _grayCmp(surface, bbox.xMin, y), bbox.w(), opacity, false);
+        _rasterGrayPixels(surface, surface->buf8 + y * surface->stride + bbox.xMin, line, _grayCmp(surface, bbox.xMin, y), bbox.w(), opacity, false, !_compositing(surface) && _blending(surface));
     }
     return true;
 }
@@ -956,7 +978,7 @@ static bool _rasterGrayScaledRleImage(SwSurface* surface, const SwImage& image, 
             SCALED_IMAGE_RANGE_X
             *src = scaleMethod(image.buf32, image.stride, image.w, image.h, sx, sy, miny, maxy, sampleSize) | amask;
         }
-        _rasterGrayPixels(surface, &surface->buf8[span.y * surface->stride + span.x], surface->line, _grayCmp(surface, span.x, span.y), span.len, MULTIPLY(span.coverage, opacity), false);
+        _rasterGrayPixels(surface, &surface->buf8[span.y * surface->stride + span.x], surface->line, _grayCmp(surface, span.x, span.y), span.len, MULTIPLY(span.coverage, opacity), false, !_compositing(surface) && _blending(surface));
     }
     return true;
 }
@@ -1065,7 +1087,7 @@ static bool _rasterGrayDirectRleImage(SwSurface* surface, const SwImage& image, 
         if (!span->fetch(bbox, x, len)) continue;
         auto dst = &surface->buf8[span->y * surface->stride + x];
         auto img = image.buf32 + (span->y + image.oy) * image.stride + (x + image.ox);
-        _rasterGrayPixels(surface, dst, img, _grayCmp(surface, x, span->y), len, MULTIPLY(span->coverage, opacity), image.alphaIgnored);
+        _rasterGrayPixels(surface, dst, img, _grayCmp(surface, x, span->y), len, MULTIPLY(span->coverage, opacity), image.alphaIgnored, !_compositing(surface) && _blending(surface));
     }
     return true;
 }
@@ -1234,7 +1256,7 @@ static bool _rasterGrayDirectImage(SwSurface* surface, const SwImage& image, con
     auto dbuffer = surface->buf8 + (bbox.yMin * surface->stride) + bbox.xMin;
 
     for (auto y = 0; y < h; ++y, dbuffer += surface->stride, sbuffer += image.stride) {
-        _rasterGrayPixels(surface, dbuffer, sbuffer, _grayCmp(surface, bbox.xMin, bbox.yMin + y), w, opacity, image.alphaIgnored);
+        _rasterGrayPixels(surface, dbuffer, sbuffer, _grayCmp(surface, bbox.xMin, bbox.yMin + y), w, opacity, image.alphaIgnored, _blending(surface));
     }
     return true;
 }
@@ -1358,7 +1380,9 @@ static bool _rasterGrayGradientRect(SwSurface* surface, const RenderRegion& bbox
 
     for (uint32_t y = 0; y < bbox.h(); ++y, buffer += surface->stride) {
         fillRaster(fill, surface->line, bbox.yMin + y, bbox.xMin, bbox.w(), opBlendSrcOver, 255);
-        _rasterGrayPixels(surface, buffer, surface->line, _grayCmp(surface, bbox.xMin, bbox.yMin + y), bbox.w(), 255, !fill->translucent);
+        // matting ignores blending as the 32 bits path does
+        if (!_compositing(surface) && _blending(surface)) _rasterGrayBlendingPixels(surface, buffer, surface->line, bbox.w(), fill->translucent ? opBlendPreNormal : opBlendSrcOver, 255);
+        else _rasterGrayPixels(surface, buffer, surface->line, _grayCmp(surface, bbox.xMin, bbox.yMin + y), bbox.w(), 255, !fill->translucent, false);
     }
     return true;
 }
@@ -1494,7 +1518,10 @@ static bool _rasterGrayGradientRle(SwSurface* surface, const SwRle* rle, const S
 
     for (uint32_t i = 0; i < rle->size(); ++i, ++span) {
         fillRaster(fill, surface->line, span->y, span->x, span->len, opBlendSrcOver, 255);
-        _rasterGrayPixels(surface, &surface->buf8[span->y * surface->stride + span->x], surface->line, _grayCmp(surface, span->x, span->y), span->len, span->coverage, !fill->translucent);
+        auto dst = &surface->buf8[span->y * surface->stride + span->x];
+        // matting ignores blending as the 32 bits path does
+        if (!_compositing(surface) && _blending(surface)) _rasterGrayBlendingPixels(surface, dst, surface->line, span->len, opBlendPreNormal, span->coverage);
+        else _rasterGrayPixels(surface, dst, surface->line, _grayCmp(surface, span->x, span->y), span->len, span->coverage, !fill->translucent, false);
     }
     return true;
 }

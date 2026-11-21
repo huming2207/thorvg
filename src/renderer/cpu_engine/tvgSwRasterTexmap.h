@@ -153,7 +153,7 @@ static void _rasterPolygonImageSegmentGray(TexmapCtx& ctx, int yStart, int yEnd,
                 u += _dudx;
                 v += _dvdx;
             }
-            _rasterGrayPixels(ctx.surface, ctx.surface->buf8 + (y * ctx.surface->stride) + x1, line, _grayCmp(ctx.surface, x1, y), buf - line, ctx.opacity, false);
+            _rasterGrayPixels(ctx.surface, ctx.surface->buf8 + (y * ctx.surface->stride) + x1, line, _grayCmp(ctx.surface, x1, y), buf - line, ctx.opacity, false, !_compositing(ctx.surface) && _blending(ctx.surface));
         }
 
         // Step along both edges
