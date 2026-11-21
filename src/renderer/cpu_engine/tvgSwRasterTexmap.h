@@ -75,8 +75,108 @@ static bool _rasterMaskedPolygonImageSegment(TexmapCtx& ctx, int yStart, int yEn
     return false;
 }
 
+// sample a horizontal line to the scanline buffer, then compose it to the gray target
+static void _rasterPolygonImageSegmentGray(TexmapCtx& ctx, int yStart, int yEnd, bool needAA)
+{
+    auto _dudx = ctx.dudx, _dvdx = ctx.dvdx;
+    auto _dxdya = ctx.dxdya, _dxdyb = ctx.dxdyb, _dudya = ctx.dudya, _dvdya = ctx.dvdya;
+    auto _xa = ctx.xa, _xb = ctx.xb, _ua = ctx.ua, _va = ctx.va;
+    auto sbuf = ctx.image.buf32;
+    auto line = ctx.surface->line;
+    auto sw = static_cast<int32_t>(ctx.image.w);
+    auto sh = static_cast<int32_t>(ctx.image.h);
+    int32_t x1, x2, x, y, ar, ab, iru, irv, px;
+    int32_t vv = 0, uu = 0;
+    float dx, u, v;
+    uint32_t* buf;
+
+    if (yStart < ctx.bbox.yMin) yStart = ctx.bbox.yMin;
+    if (yEnd > ctx.bbox.yMax) yEnd = ctx.bbox.yMax;
+
+    y = yStart;
+
+    while (y < yEnd) {
+        x1 = std::max((int32_t)_xa, ctx.bbox.xMin);
+        x2 = std::min((int32_t)_xb, ctx.bbox.xMax);
+
+        // Range allowed
+        if ((x2 - x1) >= 1 && (x1 < ctx.bbox.xMax) && (x2 > ctx.bbox.xMin)) {
+            // Perform subtexel pre-stepping on UV
+            dx = 1 - (_xa - x1);
+            u = _ua + dx * _dudx;
+            v = _va + dx * _dvdx;
+            buf = line;
+            x = x1;
+
+            // Sample horizontal line
+            while (x++ < x2) {
+                uu = (int)u;
+                vv = (int)v;
+
+                if ((uint32_t)uu >= ctx.image.w || (uint32_t)vv >= ctx.image.h) continue;
+
+                ar = _modf(u);
+                ab = _modf(v);
+                iru = uu + 1;
+                irv = vv + 1;
+
+                px = *(sbuf + (vv * ctx.image.stride) + uu);
+
+                if (ctx.image.filter == FilterMethod::Bilinear) {
+                    // horizontal interpolate
+                    if (iru < sw) {
+                        int px2 = *(sbuf + (vv * ctx.image.stride) + iru);
+                        px = INTERPOLATE(px, px2, ar);
+                    }
+                    // vertical interpolate
+                    if (irv < sh) {
+                        int px2 = *(sbuf + (irv * ctx.image.stride) + uu);
+                        // horizontal interpolate
+                        if (iru < sw) {
+                            int px3 = *(sbuf + (irv * ctx.image.stride) + iru);
+                            px2 = INTERPOLATE(px2, px3, ar);
+                        }
+                        px = INTERPOLATE(px, px2, ab);
+                    }
+                }
+
+                // anti-aliasing
+                if (needAA) {
+                    auto feather = _feathering(iru, irv, ar, ab, sw, sh);
+                    if (feather < 255) px = ALPHA_BLEND(px, feather);
+                }
+
+                *buf = px;
+                ++buf;
+
+                // Step UV horizontally
+                u += _dudx;
+                v += _dvdx;
+            }
+            _rasterGrayPixels(ctx.surface, ctx.surface->buf8 + (y * ctx.surface->stride) + x1, line, _grayCmp(ctx.surface, x1, y), buf - line, ctx.opacity, false);
+        }
+
+        // Step along both edges
+        _xa += _dxdya;
+        _xb += _dxdyb;
+        _ua += _dudya;
+        _va += _dvdya;
+
+        ++y;
+    }
+    ctx.xa = _xa;
+    ctx.xb = _xb;
+    ctx.ua = _ua;
+    ctx.va = _va;
+}
+
 static void _rasterBlendingPolygonImageSegment(TexmapCtx& ctx, int yStart, int yEnd, bool needAA)
 {
+    if (_grayscale(ctx.surface)) {
+        _rasterPolygonImageSegmentGray(ctx, yStart, yEnd, needAA);
+        return;
+    }
+
     if (ctx.surface->channelSize == sizeof(uint8_t)) {
         TVGERR("SW_ENGINE", "Not supported grayscale Textmap polygon!");
         return;
@@ -342,7 +442,8 @@ static void _rasterPolygonImageSegment8(TexmapCtx& ctx, int yStart, int yEnd, TV
 
 static void _rasterPolygonImageSegment(TexmapCtx& ctx, int yStart, int yEnd, bool matting, bool needAA)
 {
-    if (ctx.surface->channelSize == sizeof(uint32_t)) _rasterPolygonImageSegment32(ctx, yStart, yEnd, matting, needAA);
+    if (_grayscale(ctx.surface)) _rasterPolygonImageSegmentGray(ctx, yStart, yEnd, needAA);
+    else if (ctx.surface->channelSize == sizeof(uint32_t)) _rasterPolygonImageSegment32(ctx, yStart, yEnd, matting, needAA);
     else if (ctx.surface->channelSize == sizeof(uint8_t)) _rasterPolygonImageSegment8(ctx, yStart, yEnd, needAA);
 }
 

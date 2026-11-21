@@ -563,7 +563,8 @@ TVG_API Tvg_Canvas tvg_swcanvas_create(Tvg_Engine_Option op);
  *
  * @warning Do not access @p buffer during tvg_canvas_draw() - tvg_canvas_sync(). It should not be accessed while the engine is writing on it.
  *
- * @note Currently, only @c TVG_COLORSPACE_ABGR8888, @c TVG_COLORSPACE_ARGB8888, @c TVG_COLORSPACE_ABGR8888S, and @c TVG_COLORSPACE_ARGB8888S are supported for @p cs.
+ * @note Currently, only @c TVG_COLORSPACE_ABGR8888, @c TVG_COLORSPACE_ARGB8888, @c TVG_COLORSPACE_ABGR8888S, @c TVG_COLORSPACE_ARGB8888S, and @c TVG_COLORSPACE_GRAYSCALE8 are supported for @p cs.
+ * @note @c TVG_COLORSPACE_GRAYSCALE8 is an experimental option. It treats @p buffer as an opaque 1 byte per pixel memory block, and @p stride is counted in pixels. Pass the 8-bit buffer by casting it to @c uint32_t*.
  * @see Tvg_Colorspace
  */
 TVG_API Tvg_Result tvg_swcanvas_set_target(Tvg_Canvas canvas, uint32_t* buffer, uint32_t stride, uint32_t w, uint32_t h, Tvg_Colorspace cs);
