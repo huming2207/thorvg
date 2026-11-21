@@ -521,7 +521,7 @@ TEST_CASE("Grayscale8 Draw", "[tvgSwEngine]")
 
         REQUIRE(pixel(25, 25) == 0);
         REQUIRE(pixel(75, 25) == 127);
-        REQUIRE(pixel(25, 75) == 53);  // red luminance
+        REQUIRE(pixel(25, 75) == 54);  // red luminance (54.2)
         REQUIRE(abs(pixel(75, 75) - 127) <= 1);
         REQUIRE(pixel(2, 98) == 255);
 
@@ -630,6 +630,30 @@ TEST_CASE("Grayscale8 Draw", "[tvgSwEngine]")
         REQUIRE(pixel(50, 50) == 100);
         REQUIRE(pixel(80, 80) == 7);  // blue x gray(100) luminance
         REQUIRE(pixel(25, 25) == 101);
+
+        // Stacked translucent layers darken as on the 32 bits target, without stalling
+        uint32_t argb[100 * 100];
+        auto canvas2 = unique_ptr<SwCanvas>(SwCanvas::gen());
+        REQUIRE(canvas2->target(argb, 100, 100, 100, ColorSpace::ARGB8888) == Result::Success);
+
+        for (auto c : {canvas.get(), canvas2.get()}) {
+            REQUIRE(c->remove() == Result::Success);
+            auto white = Shape::gen();
+            REQUIRE(white->appendRect(0, 0, 100, 100) == Result::Success);
+            REQUIRE(white->fill(255, 255, 255) == Result::Success);
+            REQUIRE(c->add(white) == Result::Success);
+            for (int i = 0; i < 200; ++i) {
+                auto layer = Shape::gen();
+                REQUIRE(layer->appendRect(0, 0, 50, 100) == Result::Success);
+                REQUIRE(layer->fill(0, 0, 0, i < 100 ? 5 : 2) == Result::Success);
+                REQUIRE(c->add(layer) == Result::Success);
+            }
+            REQUIRE(c->draw(true) == Result::Success);
+            REQUIRE(c->sync() == Result::Success);
+        }
+        REQUIRE(pixel(25, 50) == int(argb[50 * 100 + 25] & 0xff));
+        REQUIRE(pixel(25, 50) < 5);
+        REQUIRE(pixel(75, 50) == 255);
     }
     REQUIRE(Initializer::term() == Result::Success);
 }

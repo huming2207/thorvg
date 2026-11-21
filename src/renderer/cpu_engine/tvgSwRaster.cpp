@@ -162,14 +162,16 @@ static inline bool _grayscale(const SwSurface* surface)
     return surface->cs == ColorSpace::Grayscale8;
 }
 
+// 0.2126*R + 0.7152*G + 0.0722*B, summed to 256 and rounded: grays and white stay exact, never exceeds the alpha
 static inline uint8_t _gray(uint32_t c)
 {
-    return ((C3(c) * 54) + (C2(c) * 183) + (C1(c) * 19)) >> 8;  // 0.2126*R + 0.7152*G + 0.0722*B, summed to 256 for the exact white
+    return ((C3(c) * 54) + (C2(c) * 183) + (C1(c) * 19) + 128) >> 8;
 }
 
+// premultiplied source over, rounded as the 32 bits targets do. MULTIPLY() rounds up and stalls the translucent layers.
 static inline uint8_t _grayBlend(uint32_t s, uint8_t d)
 {
-    return _gray(s) + MULTIPLY(d, IA(s));
+    return _gray(s) + ALPHA_BLEND(d, IA(s));
 }
 
 static inline uint8_t _grayBlender(const SwSurface* surface, uint32_t s, uint8_t d)
@@ -469,7 +471,7 @@ static bool _rasterGrayRect(SwSurface* surface, const RenderRegion& bbox, const 
     auto ialpha = 255 - c.a;
     for (uint32_t y = 0; y < bbox.h(); ++y, buffer += surface->stride) {
         for (auto dst = buffer; dst < buffer + bbox.w(); ++dst) {
-            *dst = gray + MULTIPLY(*dst, ialpha);
+            *dst = gray + ALPHA_BLEND(*dst, ialpha);
         }
     }
     return true;
@@ -682,7 +684,7 @@ static bool _rasterGrayRle(SwSurface* surface, const SwRle* rle, const RenderReg
             auto dst = &surface->buf8[span->y * surface->stride + x];
             auto ialpha = IA(src);
             for (auto x = 0; x < len; ++x, ++dst) {
-                *dst = gray + MULTIPLY(*dst, ialpha);
+                *dst = gray + ALPHA_BLEND(*dst, ialpha);
             }
         }
     }
