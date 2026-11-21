@@ -24,7 +24,7 @@
 #define _TVG_INLIST_H_
 
 #include <cstdint>
-#include "tvgAllocator.h"
+#include "tvgCommon.h"
 
 namespace tvg
 {

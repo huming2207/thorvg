@@ -51,16 +51,16 @@ def check(clang_query, sources, build=None, flags=None):
 
 
 def self_test(clang_query):
-    prefix = '#include <thorvg.h>\n#include <memory>\n#include <new>\n'
+    prefix = '#include <thorvg.h>\n#include <cstdlib>\n#include <memory>\n#include <new>\n'
     cases = {
-        "malloc/free and stack": ("void f() { tvg::Matrix m{}; auto p = tvg::malloc<tvg::Matrix>(sizeof(m)); *p = m; tvg::free(p); }", 0),
+        "malloc/free and stack": ("void f() { tvg::Matrix m{}; auto p = static_cast<tvg::Matrix*>(std::malloc(sizeof(m))); *p = m; std::free(p); }", 0),
         "unrelated names": ("namespace other { struct Matrix {}; } void f() { delete new other::Matrix; }", 0),
         "placement construction": ("void f() { alignas(tvg::Matrix) char storage[sizeof(tvg::Matrix)]; new (storage) tvg::Matrix{}; }", 0),
         "scalar": ("void f() { delete new tvg::Matrix; }", 2),
         "alias array": ("using M = tvg::Matrix; void f() { auto p = new M[2]; delete[] p; }", 2),
-        "nothrow": ("void f() { auto p = new (std::nothrow) tvg::Matrix; tvg::free(p); }", 1),
-        "macro": ("#define MAKE(T) new T\nvoid f() { tvg::free(MAKE(tvg::Point)); }", 1),
-        "template": ("template<class T> T* make() { return new T; } void f() { tvg::free(make<tvg::Matrix>()); }", 1),
+        "nothrow": ("void f() { auto p = new (std::nothrow) tvg::Matrix; std::free(p); }", 1),
+        "macro": ("#define MAKE(T) new T\nvoid f() { std::free(MAKE(tvg::Point)); }", 1),
+        "template": ("template<class T> T* make() { return new T; } void f() { std::free(make<tvg::Matrix>()); }", 1),
         "member delete": ("struct Owner { tvg::Matrix* p; ~Owner() { delete p; } };", 1),
         "default deleter": ("void f(tvg::Matrix* p) { std::default_delete<tvg::Matrix>{}(p); }", 1),
     }

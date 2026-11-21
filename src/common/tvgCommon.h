@@ -104,6 +104,6 @@ namespace tvg
     extern int engineInit;
 }
 
-#include "tvgAllocator.h"
+#include "tvgHeap.h"
 
 #endif //_TVG_COMMON_H_

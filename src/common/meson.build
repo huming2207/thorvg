@@ -3,6 +3,7 @@ source_file = [
    'tvgCommon.h',
    'tvgColor.h',
    'tvgCompressor.h',
+   'tvgHeap.h',
    'tvgInlist.h',
    'tvgLock.h',
    'tvgMap.h',
