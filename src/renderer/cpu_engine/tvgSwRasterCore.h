@@ -55,9 +55,19 @@ void cRasterGaussianFilterRow(uint8_t*, const uint8_t*, int32_t, int32_t, float)
     #define rasterPremultiply cRasterPremultiply
     #define rasterTranslucentPixels cRasterTranslucentPixels
     #define rasterSolidPixels cRasterSolidPixels
-    #define rasterSolidPixel32 cRasterSolidPixel32
-    #define rasterTranslucentRle cRasterTranslucentRle
-    #define rasterTranslucentRect cRasterTranslucentRect
+    #ifdef THORVG_ESP_PIE_SUPPORT
+        // PIE is a part of the target ISA, no runtime detection is needed.
+        void pieRasterSolidPixel32(uint32_t*, uint32_t, uint32_t, int32_t);
+        bool pieRasterTranslucentRle(SwSurface*, const SwRle*, const RenderRegion&, const RenderColor&);
+        bool pieRasterTranslucentRect(SwSurface*, const RenderRegion&, const RenderColor&);
+        #define rasterSolidPixel32 pieRasterSolidPixel32
+        #define rasterTranslucentRle pieRasterTranslucentRle
+        #define rasterTranslucentRect pieRasterTranslucentRect
+    #else
+        #define rasterSolidPixel32 cRasterSolidPixel32
+        #define rasterTranslucentRle cRasterTranslucentRle
+        #define rasterTranslucentRect cRasterTranslucentRect
+    #endif
     #define rasterABGRtoARGB cRasterABGRtoARGB
     #define rasterGaussianFilterRow cRasterGaussianFilterRow
 #endif

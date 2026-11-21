@@ -317,5 +317,7 @@ void rasterInit()
     rasterGaussianFilterRow = neonRasterGaussianFilterRow;
     rasterGaussianXYFlipBlock = neonRasterGaussianXYFlipBlock;
     TVGLOG("SW_ENGINE", "Run NEON Vectorization.");
+#elif defined(THORVG_ESP_PIE_SUPPORT)
+    TVGLOG("SW_ENGINE", "Run ESP PIE Vectorization.");
 #endif
 }
