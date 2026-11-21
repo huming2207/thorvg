@@ -407,6 +407,71 @@ TEST_CASE("Intersection", "[tvgSwEngine]")
     REQUIRE(Initializer::term() == Result::Success);
 }
 
+TEST_CASE("Scene Effects Composition", "[tvgSwEngine]")
+{
+    REQUIRE(Initializer::init() == Result::Success);
+    {
+        constexpr uint32_t W = 64, H = 64;
+        uint32_t direct[W * H], indirect[W * H];
+
+        // A second, inactive effect (a zero sigma blur) composes the scene effect via an intermediate layer.
+        auto draw = [&](uint32_t* buffer, int effect, bool layered, bool dirty) {
+            auto canvas = unique_ptr<SwCanvas>(SwCanvas::gen());
+            REQUIRE(canvas->target(buffer, W, W, H, ColorSpace::ARGB8888) == Result::Success);
+
+            // leaves the shadow of a full region in the pooled post processing buffers
+            if (dirty) {
+                auto scene = Scene::gen();
+                auto shape = Shape::gen();
+                shape->appendRect(0, 0, W, H);
+                shape->fill(255, 0, 0);
+                scene->add(shape);
+                scene->add(SceneEffect::DropShadow, 0, 255, 0, 255, 45.0, 3.0, 3.0, 100);
+                scene->add(SceneEffect::GaussianBlur, 0.0, 0, 0, 100);
+                REQUIRE(canvas->add(scene) == Result::Success);
+                REQUIRE(canvas->draw(true) == Result::Success);
+                REQUIRE(canvas->sync() == Result::Success);
+                REQUIRE(canvas->remove() == Result::Success);
+            }
+
+            auto scene = Scene::gen();
+            auto shape = Shape::gen();
+            shape->appendRect(16, 16, 24, 24);
+            shape->fill(200, 60, 30);
+            scene->add(shape);
+            scene->opacity(effect == 0 ? 255 : 128);
+            if (effect == 0) scene->add(SceneEffect::DropShadow, 0, 0, 0, 128, 45.0, 6.0, 0.0, 100);
+            if (effect == 1) scene->add(SceneEffect::Tint, 0, 0, 0, 255, 255, 255, 60.0);
+            if (effect == 2) scene->add(SceneEffect::Tritone, 0, 0, 0, 128, 128, 128, 255, 255, 255, 0);
+            if (layered) scene->add(SceneEffect::GaussianBlur, 0.0, 0, 0, 100);
+            REQUIRE(canvas->add(scene) == Result::Success);
+            REQUIRE(canvas->draw(true) == Result::Success);
+            REQUIRE(canvas->sync() == Result::Success);
+        };
+
+        auto maxDiff = [&]() {
+            int diff = 0;
+            for (uint32_t i = 0; i < W * H; ++i) {
+                for (int s = 0; s < 32; s += 8) diff = std::max(diff, abs(int((direct[i] >> s) & 0xff) - int((indirect[i] >> s) & 0xff)));
+            }
+            return diff;
+        };
+
+        // DropShadow without blur keeps the shadow opacity and clears the uncovered region of the layer
+        draw(direct, 0, false, false);
+        draw(indirect, 0, true, true);
+        REQUIRE(maxDiff() <= 1);
+
+        // Tint, Tritone: the scene opacity is applied once
+        for (int effect = 1; effect <= 2; ++effect) {
+            draw(direct, effect, false, false);
+            draw(indirect, effect, true, false);
+            REQUIRE(maxDiff() <= 1);
+        }
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
 TEST_CASE("Grayscale8 Draw", "[tvgSwEngine]")
 {
     REQUIRE(Initializer::init() == Result::Success);
