@@ -5,7 +5,6 @@
 #include <functional>
 #include <list>
 #include <cstdarg>
-#include "tvgAllocator.h"
 
 #define TVG_VERSION_MAJOR 1  // for compile-time checks
 #define TVG_VERSION_MINOR 0  // for compile-time checks
@@ -46,6 +45,8 @@
 #else
     #define TVG_DEPRECATED
 #endif
+
+#include "tvgAllocator.h"
 
 #define _TVG_PROTECTED_CTOR(A) \
 protected: \
@@ -2692,18 +2693,23 @@ struct TVG_API Initializer final
      *
      * @param[in] threads The number of worker threads to create.
      *                    A value of 0 disables worker threads, executing rendering tasks on the calling thread.
+     * @param[in] allocator The heap allocator callbacks for ThorVG's dynamic memory.
+     *                      Leave it default to use std::malloc, std::calloc, std::realloc and std::free.
      *
      * @return Result indicating success or failure of initialization.
+     * @retval Result::InvalidArguments If any callback of @p allocator is @c nullptr.
      *
      * @note Initialization is reference-counted. Each successful call increments the reference count.
-     *       The worker thread count is determined by the first successful initialization and remains
-     *       unchanged until the engine is fully terminated.
+     *       The worker thread count and the heap allocator are determined by the first successful initialization
+     *       and remain unchanged until the engine is fully terminated.
      *
      * @warning Each pair of init() and term() calls must be made from the same thread.
+     * @warning ThorVG objects must not outlive the engine termination, since their memory belongs to @p allocator.
      *
      * @see Initializer::term()
+     * @see HeapAllocator
      */
-    static Result init(uint32_t threads = 0) noexcept;
+    static Result init(uint32_t threads = 0, const HeapAllocator& allocator = {}) noexcept;
 
     /**
      * @brief Terminates the ThorVG engine.

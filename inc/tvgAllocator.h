@@ -23,96 +23,61 @@
 #ifndef _TVG_ALLOCATOR_H_
 #define _TVG_ALLOCATOR_H_
 
+#ifndef _THORVG_H_
+#error "Do not include tvgAllocator.h directly, include thorvg.h instead."
+#endif
+
 #include <cstdlib>
 #include <cstddef>
 #include <new>
 
-//separate memory allocators for clean customization
 namespace tvg
 {
-    template<typename T = void>
-    static inline T* malloc(size_t size)
-    {
-        return static_cast<T*>(std::malloc(size));
-    }
 
-    template<typename T = void>
-    static inline T* calloc(size_t nmem, size_t size)
-    {
-        return static_cast<T*>(std::calloc(nmem, size));
-    }
+/**
+ * @brief Heap allocator callbacks used by ThorVG for its dynamic memory.
+ *
+ * The defaults point to std::malloc, std::calloc, std::realloc and std::free.
+ * Pass a customized instance to Initializer::init() to redirect ThorVG's heap,
+ * e.g. to an external RAM on embedded systems.
+ *
+ * @note All four callbacks must be set and must operate on the same heap.
+ *
+ * @see Initializer::init()
+ */
+struct HeapAllocator
+{
+    void* (*alloc)(size_t) = std::malloc;
+    void* (*calloc)(size_t, size_t) = std::calloc;
+    void* (*realloc)(void*, size_t) = std::realloc;
+    void (*free)(void*) = std::free;
+};
 
-    template<typename T = void>
-    static inline T* realloc(T* ptr, size_t size)
-    {
-        return static_cast<T*>(std::realloc(ptr, size));
-    }
+/**
+ * @brief Class-scoped allocation operators of the ThorVG objects.
+ *
+ * ThorVG objects are allocated from the HeapAllocator given to Initializer::init(),
+ * while the global new/delete operators of the host application stay untouched,
+ * including in static builds. The operators are defined in the library, so an object
+ * is released to the same heap regardless of which binary deletes it.
+ */
+struct TVG_API Allocator
+{
+    static void* operator new(std::size_t size);
+    static void* operator new[](std::size_t size);
+    static void* operator new(std::size_t size, const std::nothrow_t&) noexcept;
+    static void* operator new[](std::size_t size, const std::nothrow_t&) noexcept;
+    static void operator delete(void* ptr) noexcept;
+    static void operator delete[](void* ptr) noexcept;
+    static void operator delete(void* ptr, const std::nothrow_t&) noexcept;
+    static void operator delete[](void* ptr, const std::nothrow_t&) noexcept;
 
-    template<typename T = void>
-    static inline void free(T* ptr)
-    {
-        std::free(ptr);
-    }
-
-    //Keep object allocation local to ThorVG, including in static builds.
-    struct Allocator
-    {
-        static void* operator new(std::size_t size)
-        {
-            if (auto ptr = tvg::malloc(size ? size : 1)) return ptr;
-            //ThorVG also builds without exceptions; never construct at nullptr.
-            std::abort();
-        }
-
-        static void* operator new[](std::size_t size)
-        {
-            return Allocator::operator new(size);
-        }
-
-        static void* operator new(std::size_t size, const std::nothrow_t&) noexcept
-        {
-            return tvg::malloc(size ? size : 1);
-        }
-
-        static void* operator new[](std::size_t size, const std::nothrow_t& tag) noexcept
-        {
-            return Allocator::operator new(size, tag);
-        }
-
-        static void* operator new(std::size_t, void* ptr) noexcept
-        {
-            return ptr;
-        }
-
-        static void* operator new[](std::size_t, void* ptr) noexcept
-        {
-            return ptr;
-        }
-
-        static void operator delete(void* ptr) noexcept
-        {
-            tvg::free(ptr);
-        }
-
-        static void operator delete[](void* ptr) noexcept
-        {
-            tvg::free(ptr);
-        }
-
-        static void operator delete(void* ptr, const std::nothrow_t&) noexcept
-        {
-            tvg::free(ptr);
-        }
-
-        static void operator delete[](void* ptr, const std::nothrow_t&) noexcept
-        {
-            tvg::free(ptr);
-        }
-
-        static void operator delete(void*, void*) noexcept {}
-
-        static void operator delete[](void*, void*) noexcept {}
-    };
+    // placement construction in existing storage allocates nothing
+    static void* operator new(std::size_t, void* ptr) noexcept { return ptr; }
+    static void* operator new[](std::size_t, void* ptr) noexcept { return ptr; }
+    static void operator delete(void*, void*) noexcept {}
+    static void operator delete[](void*, void*) noexcept {}
+};
 }
 
 #endif //_TVG_ALLOCATOR_H_

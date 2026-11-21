@@ -44,6 +44,7 @@
 
 namespace tvg {
     int engineInit = 0;
+    HeapAllocator _heapAllocator = {};
 }
 
 static uint16_t _version = 0;
@@ -81,10 +82,15 @@ static bool _buildVersionInfo(uint32_t* major, uint32_t* minor, uint32_t* micro)
 /* External Class Implementation                                        */
 /************************************************************************/
 
-Result Initializer::init(uint32_t threads) noexcept
+Result Initializer::init(uint32_t threads, const HeapAllocator& allocator) noexcept
 {
+    // a partial set would mix the heaps, e.g. a custom alloc with std::free
+    if (!allocator.alloc || !allocator.calloc || !allocator.realloc || !allocator.free) return Result::InvalidArguments;
+
     ScopedLock lock(_key);
     if (engineInit++ > 0) return Result::Success;
+
+    _heapAllocator = allocator;
 
     if (!_buildVersionInfo(nullptr, nullptr, nullptr)) return Result::Unknown;
 
@@ -135,4 +141,46 @@ const char* Initializer::version(uint32_t* major, uint32_t* minor, uint32_t* mic
 uint16_t THORVG_VERSION_NUMBER()
 {
     return _version;
+}
+
+void* Allocator::operator new(std::size_t size)
+{
+    if (auto ptr = tvg::malloc(size ? size : 1)) return ptr;
+    // ThorVG also builds without exceptions; never construct at nullptr.
+    std::abort();
+}
+
+void* Allocator::operator new[](std::size_t size)
+{
+    return Allocator::operator new(size);
+}
+
+void* Allocator::operator new(std::size_t size, const std::nothrow_t&) noexcept
+{
+    return tvg::malloc(size ? size : 1);
+}
+
+void* Allocator::operator new[](std::size_t size, const std::nothrow_t& tag) noexcept
+{
+    return Allocator::operator new(size, tag);
+}
+
+void Allocator::operator delete(void* ptr) noexcept
+{
+    tvg::free(ptr);
+}
+
+void Allocator::operator delete[](void* ptr) noexcept
+{
+    tvg::free(ptr);
+}
+
+void Allocator::operator delete(void* ptr, const std::nothrow_t&) noexcept
+{
+    tvg::free(ptr);
+}
+
+void Allocator::operator delete[](void* ptr, const std::nothrow_t&) noexcept
+{
+    tvg::free(ptr);
 }

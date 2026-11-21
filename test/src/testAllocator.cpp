@@ -57,6 +57,34 @@ void operator delete[](void* ptr, std::size_t) noexcept
 
 static unsigned liveObjects = 0;
 
+// Custom heap callbacks: plain functions, so they convert to HeapAllocator's function pointers.
+static unsigned heapAllocations = 0;
+static unsigned heapDeallocations = 0;
+
+static void* heapAlloc(std::size_t size)
+{
+    ++heapAllocations;
+    return std::malloc(size);
+}
+
+static void* heapCalloc(std::size_t nmem, std::size_t size)
+{
+    ++heapAllocations;
+    return std::calloc(nmem, size);
+}
+
+static void* heapRealloc(void* ptr, std::size_t size)
+{
+    if (!ptr) ++heapAllocations;
+    return std::realloc(ptr, size);
+}
+
+static void heapFree(void* ptr)
+{
+    if (ptr) ++heapDeallocations;
+    std::free(ptr);
+}
+
 struct AllocatedBase : tvg::Allocator
 {
     virtual ~AllocatedBase() = default;
@@ -189,5 +217,43 @@ int main()
     CHECK(deallocations == beforeFree);
 
     CHECK(tvg::Initializer::term() == tvg::Result::Success);
+
+    // A partial set of callbacks would mix the heaps.
+    tvg::HeapAllocator partial;
+    partial.free = nullptr;
+    CHECK(tvg::Initializer::init(0, partial) == tvg::Result::InvalidArguments);
+
+    // A custom heap receives ThorVG's memory: objects through tvg::Allocator, buffers through tvg::malloc.
+    tvg::HeapAllocator heap;
+    heap.alloc = heapAlloc;
+    heap.calloc = heapCalloc;
+    heap.realloc = heapRealloc;
+    heap.free = heapFree;
+    CHECK(tvg::Initializer::init(0, heap) == tvg::Result::Success);
+
+    beforeAlloc = allocations;
+    beforeFree = deallocations;
+    auto heapBefore = heapAllocations;
+    {
+        uint32_t buffer[16 * 16];
+        auto swCanvas = tvg::SwCanvas::gen();
+        CHECK(swCanvas && swCanvas->target(buffer, 16, 16, 16, tvg::ColorSpace::ARGB8888) == tvg::Result::Success);
+        auto rect = tvg::Shape::gen();
+        rect->appendRect(0, 0, 8, 8);
+        rect->fill(255, 0, 0);
+        CHECK(swCanvas->add(rect) == tvg::Result::Success);
+        CHECK(swCanvas->draw() == tvg::Result::Success && swCanvas->sync() == tvg::Result::Success);
+        CHECK(buffer[0] == 0xffff0000);
+        delete swCanvas;
+        object = new AllocatedObject;
+        delete object;
+    }
+    CHECK(heapAllocations > heapBefore);
+    // STL containers of the public API (e.g. std::list of Canvas::paints()) still use the host's heap,
+    // but every block must return to the heap it came from.
+    CHECK(allocations - beforeAlloc == deallocations - beforeFree);
+
+    CHECK(tvg::Initializer::term() == tvg::Result::Success);
+    CHECK(heapAllocations == heapDeallocations);
     return 0;
 }
