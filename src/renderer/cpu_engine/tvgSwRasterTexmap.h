@@ -75,8 +75,9 @@ static bool _rasterMaskedPolygonImageSegment(TexmapCtx& ctx, int yStart, int yEn
     return false;
 }
 
-// sample a horizontal line to the scanline buffer, then compose it to the gray target
-static void _rasterPolygonImageSegmentGray(TexmapCtx& ctx, int yStart, int yEnd, bool needAA)
+// sample a horizontal line to the scanline buffer, then compose it to the formatted target
+template<typename F>
+static void _rasterPolygonImageSegmentFmt(TexmapCtx& ctx, int yStart, int yEnd, bool needAA)
 {
     auto _dudx = ctx.dudx, _dvdx = ctx.dvdx;
     auto _dxdya = ctx.dxdya, _dxdyb = ctx.dxdyb, _dudya = ctx.dudya, _dvdya = ctx.dvdya;
@@ -153,7 +154,7 @@ static void _rasterPolygonImageSegmentGray(TexmapCtx& ctx, int yStart, int yEnd,
                 u += _dudx;
                 v += _dvdx;
             }
-            _rasterGrayPixels(ctx.surface, ctx.surface->buf8 + (y * ctx.surface->stride) + x1, line, _grayCmp(ctx.surface, x1, y), buf - line, ctx.opacity, false);
+            _rasterFmtPixels<F>(ctx.surface, F::buffer(ctx.surface) + (y * ctx.surface->stride) + x1, line, _fmtCmp(ctx.surface, x1, y), buf - line, ctx.opacity, false);
         }
 
         // Step along both edges
@@ -172,8 +173,8 @@ static void _rasterPolygonImageSegmentGray(TexmapCtx& ctx, int yStart, int yEnd,
 
 static void _rasterBlendingPolygonImageSegment(TexmapCtx& ctx, int yStart, int yEnd, bool needAA)
 {
-    if (_grayscale(ctx.surface)) {
-        _rasterPolygonImageSegmentGray(ctx, yStart, yEnd, needAA);
+    if (ctx.surface->cs == ColorSpace::Grayscale8) {
+        _rasterPolygonImageSegmentFmt<SwGray8>(ctx, yStart, yEnd, needAA);
         return;
     }
 
@@ -442,7 +443,7 @@ static void _rasterPolygonImageSegment8(TexmapCtx& ctx, int yStart, int yEnd, TV
 
 static void _rasterPolygonImageSegment(TexmapCtx& ctx, int yStart, int yEnd, bool matting, bool needAA)
 {
-    if (_grayscale(ctx.surface)) _rasterPolygonImageSegmentGray(ctx, yStart, yEnd, needAA);
+    if (ctx.surface->cs == ColorSpace::Grayscale8) _rasterPolygonImageSegmentFmt<SwGray8>(ctx, yStart, yEnd, needAA);
     else if (ctx.surface->channelSize == sizeof(uint32_t)) _rasterPolygonImageSegment32(ctx, yStart, yEnd, matting, needAA);
     else if (ctx.surface->channelSize == sizeof(uint8_t)) _rasterPolygonImageSegment8(ctx, yStart, yEnd, needAA);
 }
