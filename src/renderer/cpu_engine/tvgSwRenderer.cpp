@@ -290,27 +290,29 @@ Result SwRenderer::target(pixel_t* data, uint32_t stride, uint32_t w, uint32_t h
     if (!data || stride == 0 || w == 0 || h == 0 || w > stride) return Result::InvalidArguments;
     if (cs != ColorSpace::ABGR8888 && cs != ColorSpace::ABGR8888S && cs != ColorSpace::ARGB8888 && cs != ColorSpace::ARGB8888S && cs != ColorSpace::Grayscale8 && cs != ColorSpace::Rgb565) return Result::NonSupport;
 
+    // Grayscale8 and Rgb565 compose the sources by a scanline per thread. Reserve them here to avoid the allocations during the rendering.
+    // Allocated first, so that a failure leaves the current target as it is.
+    uint32_t* line = nullptr;
+    uint32_t lineCnt = 0;
+    if (cs == ColorSpace::Grayscale8 || cs == ColorSpace::Rgb565) {
+#ifdef THORVG_OPENMP_SUPPORT
+        lineCnt = omp_get_max_threads();
+#else
+        lineCnt = 1;
+#endif
+        if (w > SIZE_MAX / sizeof(uint32_t) / lineCnt) return Result::FailedAllocation;  // 32 bits size_t
+        line = tvg::realloc<uint32_t>(surface ? surface->line : nullptr, size_t(w) * lineCnt * sizeof(uint32_t));
+        if (!line) return Result::FailedAllocation;
+    } else if (surface) {
+        tvg::free(surface->line);
+    }
+
     clearCompositors();
 
     if (!surface) surface = new SwSurface;
 
-    // Grayscale8 and Rgb565 compose the sources by a scanline per thread. Reserve them here to avoid the allocations during the rendering.
-    if (cs == ColorSpace::Grayscale8 || cs == ColorSpace::Rgb565) {
-#ifdef THORVG_OPENMP_SUPPORT
-        uint32_t cnt = omp_get_max_threads();
-#else
-        uint32_t cnt = 1;
-#endif
-        auto line = tvg::realloc<uint32_t>(surface->line, w * cnt * sizeof(uint32_t));
-        if (!line) return Result::FailedAllocation;
-        surface->line = line;
-        surface->lineCnt = cnt;
-    } else {
-        tvg::free(surface->line);
-        surface->line = nullptr;
-        surface->lineCnt = 0;
-    }
-
+    surface->line = line;
+    surface->lineCnt = lineCnt;
     surface->data = data;
     surface->stride = stride;
     surface->w = w;

@@ -798,6 +798,44 @@ TEST_CASE("Rgb565 Draw", "[tvgSwEngine]")
     REQUIRE(Initializer::term() == Result::Success);
 }
 
+// fails the reallocations from 1MB, like the scanlines of a very wide formatted target
+static void* _failingRealloc(void* ptr, size_t size)
+{
+    return (size >= 1024 * 1024) ? nullptr : std::realloc(ptr, size);
+}
+
+TEST_CASE("Grayscale8, Rgb565 Target Allocation Failure", "[tvgSwEngine]")
+{
+    HeapAllocator allocator;
+    allocator.realloc = _failingRealloc;
+    REQUIRE(Initializer::init(0, allocator) == Result::Success);
+    {
+        constexpr uint32_t WIDE = 300000;
+        auto wide = unique_ptr<uint8_t[]>(new uint8_t[WIDE * 2]);
+        uint8_t buffer[10 * 10] = {};
+
+        for (auto cs : {ColorSpace::Grayscale8, ColorSpace::Rgb565}) {
+            // the first target fails: no target to draw on
+            auto canvas = unique_ptr<SwCanvas>(SwCanvas::gen());
+            REQUIRE(canvas->target((uint32_t*)wide.get(), WIDE, WIDE, 1, cs) == Result::FailedAllocation);
+
+            auto shape = Shape::gen();
+            REQUIRE(shape->appendRect(0, 0, 10, 10) == Result::Success);
+            REQUIRE(shape->fill(255, 255, 255) == Result::Success);
+            REQUIRE(canvas->add(shape) == Result::Success);
+            REQUIRE(canvas->draw() == Result::InsufficientCondition);
+
+            // a failing retarget keeps the current target
+            REQUIRE(canvas->target((uint32_t*)buffer, 10, 10, 10, ColorSpace::Grayscale8) == Result::Success);
+            REQUIRE(canvas->target((uint32_t*)wide.get(), WIDE, WIDE, 1, cs) == Result::FailedAllocation);
+            REQUIRE(canvas->draw() == Result::Success);
+            REQUIRE(canvas->sync() == Result::Success);
+            REQUIRE(buffer[55] == 255);
+        }
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
 TEST_CASE("Grayscale8, Rgb565 Composition", "[tvgSwEngine]")
 {
     REQUIRE(Initializer::init() == Result::Success);
