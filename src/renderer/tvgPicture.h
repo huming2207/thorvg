@@ -159,6 +159,7 @@ struct PictureImpl : Picture
     Result load(const uint32_t* data, uint32_t stride, uint32_t w, uint32_t h, ColorSpace cs, Ownership owner)
     {
         if (!data || w <= 0 || h <= 0 || stride < w || cs == ColorSpace::Unknown)  return Result::InvalidArguments;
+        if (CHANNEL_SIZE(cs) != sizeof(uint32_t)) return Result::NonSupport;  // the raw images are read in 32 bits
         if (vector) return Result::InsufficientCondition;
         auto loader = LoaderMgr::loader(data, stride, w, h, cs, owner);
         return loader ? load(loader) : Result::NonSupport;

@@ -122,6 +122,7 @@ enum struct ColorSpace : uint8_t
     ABGR8888S,     ///< The channels are joined in the order: alpha, blue, green, red. Colors are un-alpha-premultiplied. @since 0.12
     ARGB8888S,     ///< The channels are joined in the order: alpha, red, green, blue. Colors are un-alpha-premultiplied. @since 0.12
     Grayscale8,    ///< Single channel, 1 byte per pixel 8-bit grayscale.
+    Rgb565,        ///< 16-bit opaque color in the order: red (5 bits), green (6 bits), blue (5 bits) from the most significant bit, in the native byte order. @note Experimental API
     XBGR8888,      ///< 32-bit opaque color in the order: unused, blue, green, red. @note Experimental API
     XRGB8888,      ///< 32-bit opaque color in the order: unused, red, green, blue. @note Experimental API
     Unknown = 255  ///< Unknown channel data. This is reserved for an initial ColorSpace value. @since 1.0
@@ -2499,8 +2500,9 @@ struct TVG_API SwCanvas final : Canvas
      *
      * @warning Do not access @p buffer during Canvas::add() - Canvas::sync(). It should not be accessed while the engine is writing on it.
      *
-     * @note Currently, only @c ColorSpace::ABGR8888S, @c ColorSpace::ABGR8888, @c ColorSpace::ARGB8888S, @c ColorSpace::ARGB8888, and @c ColorSpace::Grayscale8 are supported for @p cs.
+     * @note Currently, only @c ColorSpace::ABGR8888S, @c ColorSpace::ABGR8888, @c ColorSpace::ARGB8888S, @c ColorSpace::ARGB8888, @c ColorSpace::Grayscale8, and @c ColorSpace::Rgb565 are supported for @p cs.
      * @note @c ColorSpace::Grayscale8 is an experimental option. It treats @p buffer as an opaque 1 byte per pixel memory block, and @p stride is counted in pixels. Pass the 8-bit buffer by casting it to @c uint32_t*.
+     * @note @c ColorSpace::Rgb565 is an experimental option. It treats @p buffer as an opaque 2 bytes per pixel memory block in the native byte order, and @p stride is counted in pixels. Pass the 16-bit buffer by casting it to @c uint32_t*.
      *
      * @see Canvas::viewport()
      * @see Canvas::sync()

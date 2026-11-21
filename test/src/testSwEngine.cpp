@@ -551,15 +551,155 @@ TEST_CASE("Grayscale8 Draw", "[tvgSwEngine]")
     REQUIRE(Initializer::term() == Result::Success);
 }
 
-TEST_CASE("Grayscale8 Composition", "[tvgSwEngine]")
+TEST_CASE("Rgb565 Draw", "[tvgSwEngine]")
 {
     REQUIRE(Initializer::init() == Result::Success);
     {
         auto canvas = unique_ptr<SwCanvas>(SwCanvas::gen());
         REQUIRE(canvas);
 
-        uint8_t buffer[100 * 100] = {};
-        REQUIRE(canvas->target((uint32_t*)buffer, 100, 100, 100, ColorSpace::Grayscale8) == Result::Success);
+        uint16_t buffer[100 * 100] = {};
+        REQUIRE(canvas->target((uint32_t*)buffer, 100, 100, 100, ColorSpace::Rgb565) == Result::Success);
+
+        auto pixel = [&](int x, int y) {
+            return buffer[y * 100 + x];
+        };
+        auto near = [](uint16_t a, uint16_t b) {  // within 1 lsb per channel
+            return abs((a >> 11) - (b >> 11)) <= 1 && abs(((a >> 5) & 0x3f) - ((b >> 5) & 0x3f)) <= 1 && abs((a & 0x1f) - (b & 0x1f)) <= 1;
+        };
+
+        // Shapes
+        auto bg = Shape::gen();
+        REQUIRE(bg->appendRect(0, 0, 100, 100) == Result::Success);
+        REQUIRE(bg->fill(255, 255, 255) == Result::Success);
+        REQUIRE(canvas->add(bg) == Result::Success);
+
+        auto red = Shape::gen();
+        REQUIRE(red->appendRect(0, 0, 50, 50) == Result::Success);
+        REQUIRE(red->fill(255, 0, 0) == Result::Success);
+        REQUIRE(canvas->add(red) == Result::Success);
+
+        auto translucent = Shape::gen();
+        REQUIRE(translucent->appendRect(50, 0, 50, 50) == Result::Success);
+        REQUIRE(translucent->fill(0, 0, 0, 128) == Result::Success);
+        REQUIRE(canvas->add(translucent) == Result::Success);
+
+        auto green = Shape::gen();
+        REQUIRE(green->appendCircle(25, 75, 20, 20) == Result::Success);
+        REQUIRE(green->fill(0, 255, 0) == Result::Success);
+        REQUIRE(canvas->add(green) == Result::Success);
+
+        auto scene = Scene::gen();
+        auto blue = Shape::gen();
+        REQUIRE(blue->appendRect(50, 50, 50, 50) == Result::Success);
+        REQUIRE(blue->fill(0, 0, 255) == Result::Success);
+        REQUIRE(scene->add(blue) == Result::Success);
+        REQUIRE(scene->opacity(128) == Result::Success);
+        REQUIRE(canvas->add(scene) == Result::Success);
+
+        REQUIRE(canvas->draw() == Result::Success);
+        REQUIRE(canvas->sync() == Result::Success);
+
+        REQUIRE(pixel(25, 25) == 0xf800);
+        REQUIRE(pixel(75, 25) == 0x7bef);  // 50% black over white
+        REQUIRE(pixel(25, 75) == 0x07e0);
+        REQUIRE(near(pixel(75, 75), 0x7bff));  // 50% blue over white
+        REQUIRE(pixel(2, 98) == 0xffff);
+
+        // Partial update: the 16 bits partial clear must erase the previous position
+        REQUIRE(red->translate(0, 50) == Result::Success);
+        REQUIRE(canvas->update() == Result::Success);
+        REQUIRE(canvas->draw() == Result::Success);
+        REQUIRE(canvas->sync() == Result::Success);
+        REQUIRE(pixel(25, 25) == 0xffff);
+        REQUIRE(pixel(25, 75) == 0x07e0);  // green stays on top
+
+        // Masking, Gradient, Blending
+        REQUIRE(canvas->remove() == Result::Success);
+
+        auto shape = Shape::gen();
+        REQUIRE(shape->appendRect(0, 0, 100, 50) == Result::Success);
+        REQUIRE(shape->fill(0, 0, 255) == Result::Success);
+        auto mask = Shape::gen();
+        REQUIRE(mask->appendRect(0, 0, 50, 50) == Result::Success);
+        REQUIRE(mask->fill(255, 255, 255) == Result::Success);
+        REQUIRE(shape->mask(mask, MaskMethod::Alpha) == Result::Success);
+        REQUIRE(canvas->add(shape) == Result::Success);
+
+        Fill::ColorStop cs[2] = {{0.0f, 0, 0, 0, 255}, {1.0f, 255, 0, 0, 255}};
+        auto linear = LinearGradient::gen();
+        REQUIRE(linear->colorStops(cs, 2) == Result::Success);
+        REQUIRE(linear->linear(0.0f, 0.0f, 100.0f, 0.0f) == Result::Success);
+        auto shape2 = Shape::gen();
+        REQUIRE(shape2->appendRect(0, 50, 100, 25) == Result::Success);
+        REQUIRE(shape2->fill(linear) == Result::Success);
+        REQUIRE(canvas->add(shape2) == Result::Success);
+
+        auto gray = Shape::gen();
+        REQUIRE(gray->appendRect(0, 75, 100, 25) == Result::Success);
+        REQUIRE(gray->fill(100, 100, 100) == Result::Success);
+        REQUIRE(canvas->add(gray) == Result::Success);
+        auto multiply = Shape::gen();
+        REQUIRE(multiply->appendRect(50, 75, 50, 25) == Result::Success);
+        REQUIRE(multiply->fill(0, 0, 255) == Result::Success);
+        REQUIRE(multiply->blend(BlendMethod::Multiply) == Result::Success);
+        REQUIRE(canvas->add(multiply) == Result::Success);
+
+        REQUIRE(canvas->draw(true) == Result::Success);
+        REQUIRE(canvas->sync() == Result::Success);
+
+        REQUIRE(pixel(25, 25) == 0x001f);
+        REQUIRE(pixel(75, 25) == 0x0000);
+        REQUIRE((pixel(5, 60) >> 11) < (pixel(50, 60) >> 11));
+        REQUIRE((pixel(50, 60) >> 11) < (pixel(95, 60) >> 11));
+        REQUIRE((pixel(50, 60) & 0x07ff) == 0);  // red only
+        REQUIRE(pixel(25, 90) == 0x632c);        // gray(100) as rgb565: r12 g25 b12
+        REQUIRE(pixel(75, 90) == 0x000c);        // blue x gray(100)
+
+        // Images: direct, scaled, transformed
+        REQUIRE(canvas->remove() == Result::Success);
+
+        uint32_t data[10 * 10];
+        for (int i = 0; i < 10 * 10; ++i) {
+            data[i] = 0xff00ff00;  // opaque green
+        }
+        auto picture = Picture::gen();
+        // raw images are 32 bits only
+        REQUIRE(picture->load(data, 10, 10, 10, ColorSpace::Rgb565, true) == Result::NonSupport);
+        REQUIRE(picture->load(data, 10, 10, 10, ColorSpace::Grayscale8, true) == Result::NonSupport);
+        REQUIRE(picture->load(data, 10, 10, 10, ColorSpace::ARGB8888, true) == Result::Success);
+        REQUIRE(canvas->add(picture) == Result::Success);
+
+        auto picture2 = picture->duplicate();
+        REQUIRE(picture2->translate(20, 0) == Result::Success);
+        REQUIRE(picture2->scale(2.0f) == Result::Success);
+        REQUIRE(canvas->add(picture2) == Result::Success);
+
+        auto picture3 = picture->duplicate();
+        REQUIRE(picture3->translate(60, 30) == Result::Success);
+        REQUIRE(picture3->rotate(30.0f) == Result::Success);
+        REQUIRE(canvas->add(picture3) == Result::Success);
+
+        REQUIRE(canvas->draw(true) == Result::Success);
+        REQUIRE(canvas->sync() == Result::Success);
+
+        REQUIRE(pixel(5, 5) == 0x07e0);
+        REQUIRE(pixel(30, 10) == 0x07e0);
+        REQUIRE(pixel(61, 36) == 0x07e0);
+        REQUIRE(pixel(50, 90) == 0x0000);
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
+TEST_CASE("Grayscale8, Rgb565 Composition", "[tvgSwEngine]")
+{
+    REQUIRE(Initializer::init() == Result::Success);
+    for (auto colorSpace : {ColorSpace::Grayscale8, ColorSpace::Rgb565}) {
+        auto canvas = unique_ptr<SwCanvas>(SwCanvas::gen());
+        REQUIRE(canvas);
+
+        uint16_t buffer[100 * 100] = {};  // large enough for both
+        REQUIRE(canvas->target((uint32_t*)buffer, 100, 100, 100, colorSpace) == Result::Success);
 
         // raw image
         ifstream file(TEST_DIR "/rawimage_200x300.raw");
