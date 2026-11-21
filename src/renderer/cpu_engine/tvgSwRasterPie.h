@@ -32,7 +32,7 @@
    - The vector loops work on 16 bytes aligned addresses, the scalar loops handle the rest.
    - The multiplications only truncate (FLOOR), so the results are identical to the scalar code:
        ALPHA_BLEND(d, ia) = (d * (ia + 1)) >> 8
-       MULTIPLY(d, 255 - a) = d - ((d * (a + 1)) >> 8)
+       MULTIPLY(d, 255 - a) = d - ((d * (a + 1)) >> 8)  (8 bits masks)
    - SAR and the rounding mode (CFG) are set per call and restored afterwards.
      ESP-IDF saves the PIE state per task, but it must not be used in ISRs or critical sections.
      On ESP32-S31, PIE is available on core 1 only: ESP-IDF migrates a task to core 1 on its first PIE instruction. */
@@ -181,6 +181,56 @@ static inline void pieBlend8(uint8_t* dst, uint8_t val, uint8_t alpha, uint32_t 
             "esp.vld.128.ip q0, %[d], 0\n"
             "esp.vmul.u8 q3, q0, q2\n"      // (d * (alpha + 1)) >> 8
             "esp.vsub.u8 q0, q0, q3\n"      // d - that = MULTIPLY(d, 255 - alpha)
+            "esp.vadd.u8 q0, q0, q1\n"      // + val, never exceeds 255
+            "esp.vst.128.ip q0, %[d], 16\n"
+            "addi %[cnt], %[cnt], -1\n"
+            "bnez %[cnt], 1b\n"
+            "esp.movx.w.cfg %[cfg]\n"
+            "esp.movx.w.sar %[sar]\n"
+            : [d] "+r"(d), [cnt] "+r"(cnt), [cfg] "=&r"(cfg), [sar] "=&r"(sar), [tmp] "=&r"(tmp)
+            : [v] "r"(v), [f] "r"(f)
+            : "memory");
+        dst = d;
+        len -= n * 16;
+    }
+    for (; len > 0; --len, ++dst) *dst = scalar(*dst);
+}
+
+// dst[i] = val + ALPHA_BLEND(dst[i], 255 - alpha), the premultiplied source over of the gray target (val <= alpha)
+static inline void pieAlphaBlend8(uint8_t* dst, uint8_t val, uint8_t alpha, uint32_t len)
+{
+    if (alpha == 0) return;  // val is 0 as well, dst stays
+
+    auto scalar = [&](uint8_t d) {
+        return static_cast<uint8_t>(val + ((d * (256 - alpha)) >> 8));
+    };
+
+    uint32_t head = _pieHead(dst, sizeof(uint8_t));
+    if (head > len) head = len;
+    for (uint32_t i = 0; i < head; ++i, ++dst) *dst = scalar(*dst);
+    len -= head;
+
+    if (auto n = len / 16) {
+        uint8_t factor = 256 - alpha;
+        register uint8_t* d asm("a0") = dst;
+        register uint32_t cnt asm("a1") = n;
+        register const uint8_t* v asm("a2") = &val;
+        register const uint8_t* f asm("a3") = &factor;
+        register uint32_t cfg asm("a4");
+        register uint32_t sar asm("a5");
+        register uint32_t tmp asm("t3");
+        asm volatile(
+            "esp.movx.r.cfg %[cfg]\n"
+            "esp.movx.r.sar %[sar]\n"
+            "andi %[tmp], %[cfg], -241\n"   // vxrm = FLOOR
+            "esp.movx.w.cfg %[tmp]\n"
+            "li %[tmp], 8\n"
+            "esp.movx.w.sar %[tmp]\n"
+            "esp.vldbc.8.ip q1, %[v], 0\n"
+            "esp.vldbc.8.ip q2, %[f], 0\n"
+            "1:\n"
+            "esp.vld.128.ip q0, %[d], 0\n"
+            "esp.vmul.u8 q0, q0, q2\n"      // (d * (256 - alpha)) >> 8
             "esp.vadd.u8 q0, q0, q1\n"      // + val, never exceeds 255
             "esp.vst.128.ip q0, %[d], 16\n"
             "addi %[cnt], %[cnt], -1\n"
