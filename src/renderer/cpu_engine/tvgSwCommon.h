@@ -426,7 +426,7 @@ static inline uint32_t INTERPOLATE(uint32_t s, uint32_t d, uint8_t a)
 
 static inline uint8_t INTERPOLATE8(uint8_t s, uint8_t d, uint8_t a)
 {
-    return (((s) * (a) + 0xff) >> 8) + (((d) * (255 - a) + 0xff) >> 8);
+    return ((s) * (a) + (d) * (255 - a) + 0xff) >> 8;
 }
 
 static inline uint8_t A(uint32_t c)
