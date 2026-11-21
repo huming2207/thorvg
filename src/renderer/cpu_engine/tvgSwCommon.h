@@ -304,7 +304,8 @@ struct SwSurface : RenderSurface
     SwAlpha alphas[4];                    // Alpha:0, InvAlpha:1, Luma:2, InvLuma:3
     SwBlender blender = nullptr;          //blender (optional)
     SwCompositor* compositor = nullptr;   //compositor (optional)
-    uint32_t* line = nullptr;             // scanline buffer for the grayscale target (optional)
+    uint32_t* line = nullptr;             // scanline buffers for the grayscale target, one per thread (optional)
+    uint32_t lineCnt = 0;                 // number of the scanline buffers
     BlendMethod blendMethod = BlendMethod::Normal;
 
     SwAlpha alpha(MaskMethod method)

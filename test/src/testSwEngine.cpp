@@ -526,6 +526,10 @@ TEST_CASE("Grayscale8 Draw", "[tvgSwEngine]")
         REQUIRE(bg2->fill(100, 100, 100) == Result::Success);
         REQUIRE(canvas->add(bg2) == Result::Success);
 
+        // the user owned data has been converted in place by the previous pictures
+        for (int i = 0; i < 10 * 10; ++i) {
+            data[i] = 0xff00ff00;
+        }
         auto picture4 = Picture::gen();
         REQUIRE(picture4->load(data, 10, 10, 10, ColorSpace::XRGB8888, true) == Result::Success);
         REQUIRE(picture4->opacity(128) == Result::Success);

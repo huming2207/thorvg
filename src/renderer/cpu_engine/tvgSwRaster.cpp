@@ -194,6 +194,16 @@ static inline uint8_t* _grayCmp(const SwSurface* surface, int32_t x, int32_t y)
     return image.buf8 + (y * image.stride + x) * image.channelSize;
 }
 
+// scanline buffer of the current thread, the parallel loop must not exceed surface->lineCnt threads
+static inline uint32_t* _grayLine(const SwSurface* surface)
+{
+#ifdef THORVG_OPENMP_SUPPORT
+    return surface->line + omp_get_thread_num() * surface->w;
+#else
+    return surface->line;
+#endif
+}
+
 // compose the premultiplied abgr pixels to the gray target with the matting compositor(cmp) if any
 static void _rasterGrayPixels(SwSurface* surface, uint8_t* dst, const uint32_t* src, uint8_t* cmp, uint32_t len, uint8_t opacity, bool alphaIgnored)
 {
@@ -913,16 +923,18 @@ static bool _rasterGrayScaledImage(SwSurface* surface, const SwImage& image, con
     auto sampleSize = _sampleSize(image.scale);
     uint32_t amask = image.alphaIgnored ? 0xff000000 : 0;  // out of range pixels must stay transparent in the scanline
 
+#pragma omp parallel for num_threads(surface->lineCnt)
     for (auto y = bbox.yMin; y < bbox.yMax; ++y) {
         int32_t miny = 0, maxy = 0;
         SCALED_IMAGE_RANGE_Y(y)
-        auto src = surface->line;
+        auto line = _grayLine(surface);
+        auto src = line;
         for (auto x = bbox.xMin; x < bbox.xMax; ++x, ++src) {
             *src = 0;
             SCALED_IMAGE_RANGE_X
             *src = scaleMethod(image.buf32, image.stride, image.w, image.h, sx, sy, miny, maxy, sampleSize) | amask;
         }
-        _rasterGrayPixels(surface, surface->buf8 + y * surface->stride + bbox.xMin, surface->line, _grayCmp(surface, bbox.xMin, y), bbox.w(), opacity, false);
+        _rasterGrayPixels(surface, surface->buf8 + y * surface->stride + bbox.xMin, line, _grayCmp(surface, bbox.xMin, y), bbox.w(), opacity, false);
     }
     return true;
 }
