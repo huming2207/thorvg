@@ -1933,6 +1933,28 @@ struct TVG_API Picture : Paint
     const Paint* paint(uint32_t id) noexcept;
 
     /**
+     * @brief Retrieve a Paint object from the Picture scene by its name.
+     *
+     * Unlike paint(), which compares the hashed IDs only, this compares the names themselves
+     * when the Picture is accessible and its loader keeps the names (SVG). So two different names
+     * whose hashes collide never return each other's Paint.
+     *
+     * Otherwise this is the same as @c paint(Accessor::id(name)).
+     *
+     * @param[in] name The name of the Paint object, such as the SVG element id.
+     *
+     * @return A pointer to the matching Paint object, or @c nullptr if not found.
+     *
+     * @note Set @ref Picture::accessible to @c true before loading to get the exact match.
+     *
+     * @see Picture::paint()
+     * @see Picture::accessible
+     *
+     * @since 1.2
+     */
+    const Paint* find(const char* name) noexcept;
+
+    /**
      * @brief Creates a new Picture object.
      *
      * This function allocates and returns a new Picture instance.

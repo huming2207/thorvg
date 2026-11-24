@@ -95,14 +95,8 @@ Result Picture::origin(float* x, float* y) const noexcept
 }
 
 
-const Paint* Picture::paint(uint32_t id) noexcept
+static const Paint* _search(Picture* picture, uint32_t id)
 {
-    if (accessible) {
-        auto entity = to<PictureImpl>(this)->access(id);
-        return entity ? entity->paint : nullptr;
-    }
-
-    // TODO: remove at thorvg v2 release (for backward compat)
     struct Value
     {
         uint32_t id;
@@ -120,10 +114,33 @@ const Paint* Picture::paint(uint32_t id) noexcept
     };
 
     auto accessor = tvg::Accessor::gen();
-    accessor->set(this, cb, &value);
+    accessor->set(picture, cb, &value);
     delete(accessor);
 
     return value.ret;
+}
+
+
+const Paint* Picture::paint(uint32_t id) noexcept
+{
+    if (accessible) {
+        auto entity = to<PictureImpl>(this)->access(id);
+        return entity ? entity->paint : nullptr;
+    }
+
+    // TODO: remove at thorvg v2 release (for backward compat)
+    return _search(this, id);
+}
+
+
+const Paint* Picture::find(const char* name) noexcept
+{
+    if (!name) return nullptr;
+
+    const AccessorEntity* entity;
+    if (accessible && to<PictureImpl>(this)->access(name, entity)) return entity ? entity->paint : nullptr;
+
+    return _search(this, Accessor::id(name));
 }
 
 

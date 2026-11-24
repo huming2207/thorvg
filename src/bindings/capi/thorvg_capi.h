@@ -2301,6 +2301,25 @@ TVG_API Tvg_Result tvg_picture_get_origin(const Tvg_Paint picture, float* x, flo
 TVG_API Tvg_Paint tvg_picture_get_paint(Tvg_Paint picture, uint32_t id);
 
 /**
+ * @brief Retrieve a paint object from the Picture scene by its name.
+ *
+ * Unlike tvg_picture_get_paint(), which compares the hashed IDs only, this compares the names
+ * themselves when the picture is accessible and its loader keeps the names (SVG). Otherwise it's the
+ * same as @c tvg_picture_get_paint(picture, tvg_accessor_generate_id(name)).
+ *
+ * @param[in] picture The picture object.
+ * @param[in] name The name of the paint object, such as the SVG element id.
+ *
+ * @return The paint object with the given name, or @c nullptr if no matching paint object is found.
+ *
+ * @note Call tvg_picture_set_accessible() with @c true before loading to get the exact match.
+ *
+ * @see tvg_picture_get_paint()
+ * @since 1.2
+ */
+TVG_API Tvg_Paint tvg_picture_find_paint(Tvg_Paint picture, const char* name);
+
+/**
  * @brief Sets the image filtering method for rendering this picture.
  *
  * Specifies how the image data should be filtered when it is scaled or transformed

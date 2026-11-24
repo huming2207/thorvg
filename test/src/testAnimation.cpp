@@ -135,6 +135,10 @@ TEST_CASE("Lottie Accessor", "[tvgAnimation]")
         REQUIRE(!picture->paint(Accessor::id("abcd")));
         REQUIRE(picture->paint(Accessor::id("bar")));
         REQUIRE(picture->paint(Accessor::id("pad1")));
+
+        //lottie keeps no names: find() falls back to the id
+        REQUIRE(picture->find("bar") == picture->paint(Accessor::id("bar")));
+        REQUIRE(!picture->find("abcd"));
     }
     REQUIRE(Initializer::term() == Result::Success);
 }

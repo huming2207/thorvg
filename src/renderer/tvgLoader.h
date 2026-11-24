@@ -156,6 +156,8 @@ struct ImageLoader : Loader
     ImageLoader(FileType type, bool playable = false) : Loader(type), playable(playable) {}
 
     virtual const AccessorEntity* access(uint32_t id) { return nullptr; }
+    // exact match on the name; false if this loader keeps no names
+    virtual bool access(const char* name, const AccessorEntity*& entity) { return false; }
     virtual void access(AccessorCallback& cb) {}
     virtual Paint* paint() { return nullptr; }
     virtual RenderSurface* bitmap() { return nullptr; }

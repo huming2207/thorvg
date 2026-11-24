@@ -712,6 +712,12 @@ TVG_API Tvg_Paint tvg_picture_get_paint(Tvg_Paint picture, uint32_t id)
     return nullptr;
 }
 
+TVG_API Tvg_Paint tvg_picture_find_paint(Tvg_Paint picture, const char* name)
+{
+    if (picture) return (Tvg_Paint) reinterpret_cast<Picture*>(picture)->find(name);
+    return nullptr;
+}
+
 TVG_API Tvg_Result tvg_picture_set_accessible(Tvg_Paint picture, bool accessible)
 {
     if (picture) {

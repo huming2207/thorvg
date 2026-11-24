@@ -44,6 +44,7 @@ struct SvgLoader : ImageLoader, Task
     bool close() override;
 
     const AccessorEntity* access(uint32_t id) override;
+    bool access(const char* name, const AccessorEntity*& entity) override;
     void access(AccessorCallback& cb) override;
 
     Paint* paint() override;

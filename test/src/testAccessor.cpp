@@ -121,4 +121,36 @@ TEST_CASE("Accessible pictures of the same file", "[tvgAccessor]")
     REQUIRE(Initializer::term() == Result::Success);
 }
 
+TEST_CASE("Find by name", "[tvgAccessor]")
+{
+    REQUIRE(Initializer::init() == Result::Success);
+    {
+        // "Ab" and "BA" have the same djb2 hash
+        REQUIRE(Accessor::id("Ab") == Accessor::id("BA"));
+        const char* svg = "<svg viewBox=\"0 0 10 10\"><rect id=\"Ab\" width=\"5\" height=\"5\"/><rect id=\"BA\" width=\"10\" height=\"10\"/><rect id=\"c\" width=\"1\" height=\"1\"/></svg>";
+
+        auto picture = unique_ptr<Picture>(Picture::gen());
+        picture->accessible = true;
+        REQUIRE(picture->load(svg, strlen(svg), "svg", nullptr, true) == Result::Success);
+
+        auto ab = picture->find("Ab");
+        auto ba = picture->find("BA");
+        REQUIRE(ab);
+        REQUIRE(ba);
+        REQUIRE(ab != ba);
+        REQUIRE(picture->find("c") == picture->paint(Accessor::id("c")));
+        REQUIRE(!picture->find("d"));
+        REQUIRE(!picture->find(nullptr));
+        REQUIRE(!picture->find(""));
+
+        // no names kept: falls back to the id
+        auto picture2 = unique_ptr<Picture>(Picture::gen());
+        REQUIRE(picture2->load(svg, strlen(svg), "svg", nullptr, true) == Result::Success);
+        REQUIRE(picture2->find("c"));
+        REQUIRE(picture2->find("Ab") == picture2->find("BA"));
+        REQUIRE(!picture2->find("d"));
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
 #endif

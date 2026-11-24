@@ -29,6 +29,7 @@
 #include "tvgSvgBuilder.h"
 #include "tvgSvgCssStyle.h"
 #include "tvgSvgUtil.h"
+#include "tvgCompressor.h"
 
 /************************************************************************/
 /* Internal Class Implementation                                        */
@@ -4297,6 +4298,22 @@ const AccessorEntity* SvgLoader::access(uint32_t id)
         if (a.id == id) return &a;
     }
     return nullptr;
+}
+
+bool SvgLoader::access(const char* name, const AccessorEntity*& entity)
+{
+    if (!ctx.accessible) return false;
+    this->done();
+    uint32_t id = djb2Encode(name);
+    entity = nullptr;
+    // the ids are hashes, so compare the names as well
+    for (auto& a : ctx.access) {
+        if (a.id == id && !strcmp(a.name, name)) {
+            entity = &a;
+            break;
+        }
+    }
+    return true;
 }
 
 void SvgLoader::access(AccessorCallback& cb)

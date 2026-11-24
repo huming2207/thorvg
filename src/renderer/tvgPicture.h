@@ -336,6 +336,11 @@ struct PictureImpl : Picture
         if (loader) loader->access(cb);
     }
 
+    bool access(const char* name, const AccessorEntity*& entity)
+    {
+        return loader && loader->access(name, entity);
+    }
+
     template<class T>
     T* fetch(FileType expect)
     {
