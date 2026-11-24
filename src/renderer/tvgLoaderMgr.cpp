@@ -199,6 +199,13 @@ static tvg::Loader* _findFromCache(const char* data, const char* mimeType)
     return nullptr;
 }
 
+// An accessible picture's id table points into the scene of that picture,
+// so its loader can't be shared with the other pictures.
+static bool _shareable(const LoaderOps& ops)
+{
+    return !(ops.caller == Type::Picture && static_cast<const PictureOps&>(ops).accessible);
+}
+
 /************************************************************************/
 /* External Class Implementation                                        */
 /************************************************************************/
@@ -235,7 +242,9 @@ tvg::Loader* LoaderMgr::loader(const char* filename, LoaderOps& ops, Result& ret
 #ifdef THORVG_FILE_IO_SUPPORT
     if (!filename) return nullptr;
 
-    if (auto loader = _findFromCache(filename)) return loader;
+    if (_shareable(ops)) {
+        if (auto loader = _findFromCache(filename)) return loader;
+    }
 
     ret = Result::InvalidArguments;
 
@@ -243,7 +252,7 @@ tvg::Loader* LoaderMgr::loader(const char* filename, LoaderOps& ops, Result& ret
         // respect the return value here, but ignore trials with unknown MIME types.
         ret = loader->open(filename, ops);
         if (ret == Result::Success) {
-            if (loader->cache(filename)) {
+            if (_shareable(ops) && loader->cache(filename)) {
                 ScopedLock lock(_key);
                 _activeLoaders.back(loader);
             }
@@ -258,7 +267,7 @@ tvg::Loader* LoaderMgr::loader(const char* filename, LoaderOps& ops, Result& ret
     for (int i = 0; i < static_cast<int>(FileType::Unknown); i++) {
         if (auto loader = _find(static_cast<FileType>(i))) {
             if (loader->open(filename, ops) == Result::Success) {
-                if (loader->cache(filename)) {
+                if (_shareable(ops) && loader->cache(filename)) {
                     ScopedLock lock(_key);
                     _activeLoaders.back(loader);
                 }
@@ -283,7 +292,7 @@ tvg::Loader* LoaderMgr::loader(const char* data, uint32_t size, const char* mime
 {
     // Note that users could use the same data pointer with the different content.
     // Thus caching is only valid for shareable.
-    if (ops.owner == Ownership::Borrow) {
+    if (ops.owner == Ownership::Borrow && _shareable(ops)) {
         if (auto loader = _findFromCache(data, mimeType)) return loader;
     }
 
@@ -295,7 +304,7 @@ tvg::Loader* LoaderMgr::loader(const char* data, uint32_t size, const char* mime
             // respect the return value here, but ignore trials with unknown MIME types.
             ret = loader->open(data, size, ops);
             if (ret == Result::Success) {
-                if (ops.owner == Ownership::Borrow && loader->cache(HASH_KEY(data))) {
+                if (ops.owner == Ownership::Borrow && _shareable(ops) && loader->cache(HASH_KEY(data))) {
                     ScopedLock lock(_key);
                     _activeLoaders.back(loader);
                 }
@@ -314,7 +323,7 @@ tvg::Loader* LoaderMgr::loader(const char* data, uint32_t size, const char* mime
         auto loader = _find(static_cast<FileType>(i));
         if (!loader) continue;
         if (loader->open(data, size, ops) == Result::Success) {
-            if (ops.owner == Ownership::Borrow && loader->cache(HASH_KEY(data))) {
+            if (ops.owner == Ownership::Borrow && _shareable(ops) && loader->cache(HASH_KEY(data))) {
                 ScopedLock lock(_key);
                 _activeLoaders.back(loader);
             }

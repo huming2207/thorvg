@@ -84,4 +84,41 @@ TEST_CASE("Set", "[tvgAccessor]")
     REQUIRE(Initializer::term() == Result::Success);
 }
 
+static bool _inside(const Paint* paint, const Paint* ancestor)
+{
+    for (; paint; paint = paint->parent()) {
+        if (paint == ancestor) return true;
+    }
+    return false;
+}
+
+TEST_CASE("Accessible pictures of the same file", "[tvgAccessor]")
+{
+    REQUIRE(Initializer::init() == Result::Success);
+    {
+        auto canvas = unique_ptr<SwCanvas>(SwCanvas::gen());
+        REQUIRE(canvas);
+
+        uint32_t buffer[100*100] = {};
+        REQUIRE(canvas->target(buffer, 100, 100, 100, ColorSpace::ARGB8888) == Result::Success);
+
+        Picture* pictures[2];
+        for (auto& picture : pictures) {
+            picture = Picture::gen();
+            picture->accessible = true;
+            REQUIRE(picture->load(TEST_DIR"/test0.svg") == Result::Success);
+            REQUIRE(canvas->add(picture) == Result::Success);
+            REQUIRE(canvas->update() == Result::Success);
+        }
+
+        // each one finds its own paint, not the one of the picture which loaded the file first
+        for (auto picture : pictures) {
+            auto paint = picture->paint(Accessor::id("path42"));
+            REQUIRE(paint);
+            REQUIRE(_inside(paint, picture));
+        }
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
 #endif
