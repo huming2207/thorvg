@@ -547,3 +547,39 @@ TEST_CASE("Load interlaced GIF file", "[tvgPicture]")
 }
 
 #endif
+
+#ifdef THORVG_SVG_LOADER_SUPPORT
+
+TEST_CASE("Update the paints inside a vector picture", "[tvgPicture]")
+{
+    REQUIRE(Initializer::init() == Result::Success);
+    {
+        auto canvas = unique_ptr<SwCanvas>(SwCanvas::gen(EngineOption::SmartRender));
+        REQUIRE(canvas);
+
+        uint32_t buffer[100 * 100] = {};
+        REQUIRE(canvas->target(buffer, 100, 100, 100, ColorSpace::ARGB8888) == Result::Success);
+
+        const char* svg = "<svg viewBox=\"0 0 100 100\"><rect id=\"a\" width=\"50\" height=\"100\" fill=\"#f00\"/><rect id=\"b\" x=\"50\" width=\"50\" height=\"100\" fill=\"#f00\"/></svg>";
+        auto picture = Picture::gen();
+        REQUIRE(picture->load(svg, strlen(svg), "svg", nullptr, true) == Result::Success);
+        REQUIRE(canvas->add(picture) == Result::Success);
+        REQUIRE(canvas->draw() == Result::Success);
+        REQUIRE(canvas->sync() == Result::Success);
+        REQUIRE(buffer[50 * 100 + 25] == 0xffff0000);
+        REQUIRE(buffer[50 * 100 + 75] == 0xffff0000);
+
+        // the picture itself didn't change, only a paint inside it
+        auto a = (Shape*) picture->paint(Accessor::id("a"));
+        REQUIRE(a);
+        REQUIRE(a->fill(0, 0, 255) == Result::Success);
+        REQUIRE(canvas->update() == Result::Success);
+        REQUIRE(canvas->draw() == Result::Success);
+        REQUIRE(canvas->sync() == Result::Success);
+        REQUIRE(buffer[50 * 100 + 25] == 0xff0000ff);
+        REQUIRE(buffer[50 * 100 + 75] == 0xffff0000);
+    }
+    REQUIRE(Initializer::term() == Result::Success);
+}
+
+#endif
